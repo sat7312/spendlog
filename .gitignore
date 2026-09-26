@@ -1,20 +1,7 @@
-# Operating system and editor files
-.DS_Store
-.idea/
-.vscode/
-*.iml
-
-# Local configuration and databases
-.env
-.env.*
-!.env.example
-*.mv.db
-*.trace.db
-
-# Build outputs and dependencies
-.gradle/
-build/
-out/
-node_modules/
-dist/
-*.tsbuildinfo
+# Root-only local files
+/.DS_Store
+/.idea/
+/.vscode/
+/.env
+/.env.*
+!/.env.example

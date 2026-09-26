@@ -1,3 +1,15 @@
+# macOS and local configuration
+.DS_Store
+.env
+.env.*
+!.env.example
+
+# Dependencies and build output
 node_modules/
 dist/
-.env.local
+coverage/
+*.tsbuildinfo
+
+# Editor metadata
+.idea/
+.vscode/
