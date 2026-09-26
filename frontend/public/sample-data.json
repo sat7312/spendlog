@@ -1,0 +1,18 @@
+{
+  "categories": [
+    { "id": "games", "name": "게임", "icon": "ti-device-gamepad-2" },
+    { "id": "hobbies", "name": "취미", "icon": "ti-palette" }
+  ],
+  "records": [
+    { "id": "sample-game-1", "category": "games", "name": "스팀 여름 세일", "amount": 52000, "date": "2026-06-02" },
+    { "id": "sample-game-2", "category": "games", "name": "PS5 컨트롤러", "amount": 79000, "date": "2026-05-28" },
+    { "id": "sample-game-3", "category": "games", "name": "엘든 링 DLC", "amount": 45000, "date": "2026-05-15" },
+    { "id": "sample-game-4", "category": "games", "name": "닌텐도 eShop 충전", "amount": 30000, "date": "2026-05-10" },
+    { "id": "sample-game-5", "category": "games", "name": "Xbox Game Pass", "amount": 16900, "date": "2026-05-01" },
+    { "id": "sample-hobby-1", "category": "hobbies", "name": "미술 용품 세트", "amount": 42000, "date": "2026-06-01" },
+    { "id": "sample-hobby-2", "category": "hobbies", "name": "사진 촬영 워크숍", "amount": 150000, "date": "2026-05-25" },
+    { "id": "sample-hobby-3", "category": "hobbies", "name": "기타 줄 세트", "amount": 15000, "date": "2026-05-20" },
+    { "id": "sample-hobby-4", "category": "hobbies", "name": "디자인 패턴 도서", "amount": 32000, "date": "2026-05-12" },
+    { "id": "sample-hobby-5", "category": "hobbies", "name": "요가 매트", "amount": 55000, "date": "2026-05-05" }
+  ]
+}
