@@ -56,6 +56,15 @@ public class SpendlogApi {
         return toData(categories.save(new Category(UUID.randomUUID().toString(), user.getSubject(), name, icon)));
     }
 
+    /** 이름과 아이콘만 바꾸므로 ID가 유지되어 기록은 그대로 남습니다. */
+    @PutMapping("/categories/{id}")
+    public CategoryData updateCategory(@AuthenticationPrincipal Jwt user, @PathVariable String id,
+            @RequestBody CategoryInput input) {
+        Category category = category(user, id);
+        category.update(required(input.name(), "카테고리 이름"), icon(input.icon()));
+        return toData(categories.save(category));
+    }
+
     @DeleteMapping("/categories/{id}")
     @Transactional
     public void deleteCategory(@AuthenticationPrincipal Jwt user, @PathVariable String id) {

@@ -57,4 +57,37 @@ class SpendlogApplicationTests {
         mvc.perform(get("/api/data").with(user("carol")))
                 .andExpect(jsonPath("$.categories", hasSize(0)));
     }
+
+    @Test
+    void updatesCategoryWithoutLosingRecords() throws Exception {
+        String body = mvc.perform(put("/api/data").with(user("dave")).contentType(MediaType.APPLICATION_JSON)
+                        .content(BACKUP))
+                .andReturn().getResponse().getContentAsString();
+        String id = com.jayway.jsonpath.JsonPath.read(body, "$.categories[0].id");
+
+        mvc.perform(put("/api/categories/" + id).with(user("dave")).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\" 비디오 게임 \",\"icon\":\"ti-trophy\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(id))
+                .andExpect(jsonPath("$.name").value("비디오 게임"))
+                .andExpect(jsonPath("$.icon").value("ti-trophy"));
+        mvc.perform(get("/api/data").with(user("dave")))
+                .andExpect(jsonPath("$.categories[0].name").value("비디오 게임"))
+                .andExpect(jsonPath("$.records", hasSize(1)))
+                .andExpect(jsonPath("$.records[0].category").value(id));
+
+        // 지원하지 않는 아이콘과 빈 이름은 거부합니다.
+        mvc.perform(put("/api/categories/" + id).with(user("dave")).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"게임\",\"icon\":\"ti-unknown\"}"))
+                .andExpect(status().isBadRequest());
+        mvc.perform(put("/api/categories/" + id).with(user("dave")).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"  \",\"icon\":\"ti-trophy\"}"))
+                .andExpect(status().isBadRequest());
+        // 다른 사용자의 카테고리는 찾을 수 없는 것으로 처리합니다.
+        mvc.perform(put("/api/categories/" + id).with(user("erin")).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"가로채기\",\"icon\":\"ti-trophy\"}"))
+                .andExpect(status().isNotFound());
+        mvc.perform(get("/api/data").with(user("dave")))
+                .andExpect(jsonPath("$.categories[0].name").value("비디오 게임"));
+    }
 }

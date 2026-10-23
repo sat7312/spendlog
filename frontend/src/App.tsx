@@ -120,6 +120,8 @@ export default function App({ user, onLogout }: { user: User; onLogout: () => vo
   const [form, setForm] = useState<RecordInput>({ category: '', name: '', amount: 0, date: seoulToday() });
   const [catName, setCatName] = useState('');
   const [catIcon, setCatIcon] = useState(icons[0]);
+  const [editingCat, setEditingCat] = useState<Category | null>(null);
+  const catNameRef = useRef<HTMLInputElement>(null);
   const [viewMonth, setViewMonth] = useState(() => monthKey(seoulToday()));
   const [day, setDay] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -134,6 +136,8 @@ export default function App({ user, onLogout }: { user: User; onLogout: () => vo
   };
 
   useEffect(() => { load().catch(e => setError(e instanceof Error ? e.message : '데이터를 불러오지 못했습니다')); }, []);
+  // 카테고리 관리 창을 닫으면 수정 중이던 내용은 버리고 추가 모드로 돌아갑니다.
+  useEffect(() => { if (modal !== 'categories') resetCategoryForm(); }, [modal]);
   useEffect(() => { document.body.dataset.theme = theme; localStorage.setItem('spendlog_theme', theme); }, [theme]);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { setModal(null); setMenuOpen(false); } };
@@ -201,12 +205,25 @@ export default function App({ user, onLogout }: { user: User; onLogout: () => vo
     if (await run(() => api.deleteRecord(record.id))) setModal(null);
   }
 
-  async function addCategory(event: FormEvent) {
+  function resetCategoryForm() { setEditingCat(null); setCatName(''); setCatIcon(icons[0]); }
+
+  function startEditCategory(item: Category) {
+    setEditingCat(item); setCatName(item.name); setCatIcon(item.icon);
+    setTimeout(() => catNameRef.current?.focus(), 0);
+  }
+
+  // 같은 폼으로 새 카테고리 추가와 기존 카테고리 수정을 함께 처리합니다.
+  async function saveCategory(event: FormEvent) {
     event.preventDefault();
     if (!catName.trim()) { setError('카테고리 이름을 입력해 주세요'); return; }
+    if (editingCat) {
+      const target = editingCat;
+      if (await run(() => api.updateCategory(target.id, catName.trim(), catIcon))) resetCategoryForm();
+      return;
+    }
     let created: Category | undefined;
     if (await run(async () => { created = await api.addCategory(catName.trim(), catIcon); })) {
-      setCatName(''); setCatIcon(icons[0]);
+      resetCategoryForm();
       if (created) setSelected(created.id);
       setModal(null);
     }
@@ -216,7 +233,7 @@ export default function App({ user, onLogout }: { user: User; onLogout: () => vo
     const count = data.records.filter(r => r.category === item.id).length;
     if (!window.confirm(count ? `이 카테고리의 기록 ${count}건도 함께 삭제됩니다. 계속하시겠습니까?`
       : '이 카테고리를 삭제하시겠습니까?')) return;
-    await run(() => api.deleteCategory(item.id));
+    if (await run(() => api.deleteCategory(item.id)) && editingCat?.id === item.id) resetCategoryForm();
   }
 
   function exportData() {
@@ -341,22 +358,28 @@ export default function App({ user, onLogout }: { user: User; onLogout: () => vo
             <button className="btn btn-primary" type="submit" disabled={busy}>저장</button></div>
         </form> : <>
           <h2 className="modal-title">카테고리 관리</h2>
-          {data.categories.length > 0 && <ul className="cat-list">{data.categories.map(c => <li className="cat-item" key={c.id}>
+          {data.categories.length > 0 && <ul className="cat-list">{data.categories.map(c => <li
+            className={`cat-item ${editingCat?.id === c.id ? 'editing' : ''}`} key={c.id}>
             <Icon name={c.icon} />
             <span className="cat-item-name">{c.name}</span><span className="cat-item-count">{data.records.filter(r => r.category === c.id).length}건</span>
+            <button className="icon-btn" aria-label={`${c.name} 수정`} aria-pressed={editingCat?.id === c.id}
+              onClick={() => startEditCategory(c)} disabled={busy}><Icon name="ti-pencil" /></button>
             <button className="icon-btn del" aria-label={`${c.name} 삭제`} onClick={() => void deleteCategory(c)} disabled={busy}><Icon name="ti-trash" /></button>
           </li>)}</ul>}
-          <form className="category-form" onSubmit={e => void addCategory(e)}>
-            <h3 className="category-form-title">새 카테고리</h3>
+          <form className="category-form" onSubmit={e => void saveCategory(e)}>
+            <h3 className="category-form-title">{editingCat ? `‘${editingCat.name}’ 수정` : '새 카테고리'}</h3>
+            {editingCat && <p className="category-form-note">이름과 아이콘만 바뀌고 기록은 그대로 남아요.</p>}
             <div className="form-group"><label className="form-label" htmlFor="category-name">이름</label>
-              <input className="form-input" id="category-name" maxLength={120} required placeholder="예: 여행, 음식"
+              <input ref={catNameRef} className="form-input" id="category-name" maxLength={120} required placeholder="예: 여행, 음식"
                 value={catName} onChange={e => setCatName(e.target.value)} /></div>
             <div className="form-group"><span className="form-label">아이콘</span><div className="icon-grid">
               {icons.map(icon => <button className={`icon-opt ${catIcon === icon ? 'selected' : ''}`} key={icon}
                 type="button" aria-label={icon} aria-pressed={catIcon === icon} onClick={() => setCatIcon(icon)}><Icon name={icon} /></button>)}
             </div></div>
-            <div className="modal-actions"><button className="btn btn-outline" type="button" onClick={() => setModal(null)}>닫기</button>
-              <button className="btn btn-primary" type="submit" disabled={busy}>추가</button></div>
+            <div className="modal-actions">{editingCat
+              ? <button className="btn btn-outline" type="button" onClick={resetCategoryForm}>수정 취소</button>
+              : <button className="btn btn-outline" type="button" onClick={() => setModal(null)}>닫기</button>}
+              <button className="btn btn-primary" type="submit" disabled={busy}>{editingCat ? '저장' : '추가'}</button></div>
           </form>
         </>}
       </div>

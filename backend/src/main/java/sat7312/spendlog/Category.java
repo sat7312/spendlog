@@ -24,6 +24,11 @@ public class Category {
         this.icon = icon;
     }
 
+    public void update(String name, String icon) {
+        this.name = name;
+        this.icon = icon;
+    }
+
     public String getId() { return id; }
     public String getOwnerId() { return ownerId; }
     public String getName() { return name; }

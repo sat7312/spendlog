@@ -47,6 +47,8 @@ export const api = {
   me: () => request<User>('/me'),
   data: () => request<SpendlogData>('/data'),
   addCategory: (name: string, icon: string) => request<Category>('/categories', 'POST', { name, icon }),
+  updateCategory: (id: string, name: string, icon: string) =>
+    request<Category>(`/categories/${encodeURIComponent(id)}`, 'PUT', { name, icon }),
   deleteCategory: (id: string) => request<void>(`/categories/${encodeURIComponent(id)}`, 'DELETE'),
   addRecord: (input: RecordInput) => request<ExpenseRecord>('/records', 'POST', input),
   updateRecord: (id: string, input: RecordInput) => request<ExpenseRecord>(`/records/${encodeURIComponent(id)}`, 'PUT', input),

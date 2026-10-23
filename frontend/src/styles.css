@@ -216,3 +216,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
 }
 /* 높이가 낮은 화면에서는 키 큰 요약 칸을 고정하지 않아 아래쪽이 가려지지 않게 합니다 */
 @media(min-width:1024px) and (max-height:899px){.overview{position:static}}
+/* 카테고리 수정 */
+.cat-item.editing{background:var(--hover);margin:0 -8px;padding:8px;border-radius:8px}
+.cat-item.editing .cat-item-name{font-weight:500}
+.category-form-note{font-size:13px;color:var(--t2);margin:-8px 0 14px}
