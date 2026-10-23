@@ -14,9 +14,13 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.oauth2.core.DelegatingOAuth2TokenValidator;
+import org.springframework.security.oauth2.core.OAuth2Error;
+import org.springframework.security.oauth2.core.OAuth2TokenValidatorResult;
 import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtEncoder;
+import org.springframework.security.oauth2.jwt.JwtValidators;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
 import org.springframework.security.web.SecurityFilterChain;
@@ -65,10 +69,17 @@ public class SecurityConfig {
         return new SecretKeySpec(bytes, "HmacSHA256");
     }
 
-    /** 이 서버가 발급한 토큰을 검증합니다. Google 토큰 검증은 {@link AuthApi}가 따로 합니다. */
+    /**
+     * 이 서버가 발급한 토큰을 검증합니다. Google 토큰 검증은 {@link AuthApi}가 따로 합니다.
+     * 허용 목록에서 빠진 계정은 토큰이 아직 유효해도 바로 막습니다.
+     */
     @Bean
-    JwtDecoder jwtDecoder(SecretKey jwtKey) {
-        return NimbusJwtDecoder.withSecretKey(jwtKey).macAlgorithm(MacAlgorithm.HS256).build();
+    JwtDecoder jwtDecoder(SecretKey jwtKey, AllowedEmails allowedEmails) {
+        NimbusJwtDecoder decoder = NimbusJwtDecoder.withSecretKey(jwtKey).macAlgorithm(MacAlgorithm.HS256).build();
+        decoder.setJwtValidator(new DelegatingOAuth2TokenValidator<>(JwtValidators.createDefault(),
+                jwt -> allowedEmails.allows(jwt.getClaimAsString("email")) ? OAuth2TokenValidatorResult.success()
+                        : OAuth2TokenValidatorResult.failure(new OAuth2Error("invalid_token", "허용되지 않은 계정입니다", null))));
+        return decoder;
     }
 
     @Bean

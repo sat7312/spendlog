@@ -32,12 +32,15 @@ public class AuthApi {
     private static final Set<String> GOOGLE_ISSUERS = Set.of("accounts.google.com", "https://accounts.google.com");
     private static final Duration TOKEN_LIFETIME = Duration.ofDays(7);
     private final AppUserRepository users;
+    private final AllowedEmails allowedEmails;
     private final JwtEncoder encoder;
     private final String clientId;
     private final NimbusJwtDecoder googleDecoder;
 
-    public AuthApi(AppUserRepository users, JwtEncoder encoder, @Value("${app.google.client-id:}") String clientId) {
+    public AuthApi(AppUserRepository users, AllowedEmails allowedEmails, JwtEncoder encoder,
+            @Value("${app.google.client-id:}") String clientId) {
         this.users = users;
+        this.allowedEmails = allowedEmails;
         this.encoder = encoder;
         this.clientId = clientId;
         googleDecoder = NimbusJwtDecoder.withJwkSetUri("https://www.googleapis.com/oauth2/v3/certs").build();
@@ -70,6 +73,9 @@ public class AuthApi {
         String id = google.getSubject();
         String email = google.getClaimAsString("email");
         String name = google.getClaimAsString("name");
+        if (!Boolean.TRUE.equals(google.getClaimAsBoolean("email_verified")) || !allowedEmails.allows(email)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "허용되지 않은 계정입니다");
+        }
         AppUser user = users.findById(id).orElseGet(() -> new AppUser(id, email, name));
         user.update(email, name);
         users.save(user);

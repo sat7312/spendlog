@@ -19,6 +19,9 @@ server:
 app:
   google:
     client-id: ${GOOGLE_CLIENT_ID:}
+  auth:
+    # 쉼표로 구분한 허용 이메일. 비워 두면 모든 Google 계정이 로그인할 수 있습니다.
+    allowed-emails: ${ALLOWED_EMAILS:}
   jwt:
     # 32바이트 이상. 비워 두면 실행할 때마다 임의 키를 만들어 재시작 시 로그인이 풀립니다.
     secret: ${JWT_SECRET:}
