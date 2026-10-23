@@ -93,6 +93,21 @@ button:disabled{opacity:.45;cursor:not-allowed}
 .tx-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .tx-amount{font-variant-numeric:tabular-nums;white-space:nowrap}
 
+/* 카테고리별 비중 */
+.share{margin-bottom:36px}
+.share ul{display:flex;flex-direction:column;gap:2px}
+.share-row{display:grid;grid-template-columns:1fr auto auto;align-items:baseline;gap:4px 12px;width:calc(100% + 16px);margin:0 -8px;padding:8px;border:0;border-radius:8px;background:none;cursor:pointer;text-align:left;font-size:14px;transition:background .12s}
+.share-row:hover{background:var(--hover)}
+.share-name{display:flex;align-items:center;gap:6px;color:var(--t2);min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.share-name i{font-size:16px}
+.share-pct{font-size:13px;color:var(--t3);font-variant-numeric:tabular-nums}
+.share-amt{font-weight:500;font-variant-numeric:tabular-nums;min-width:84px;text-align:right}
+.share-track{grid-column:1/-1;height:6px;border-radius:3px;background:var(--hover);overflow:hidden}
+.share-fill{display:block;height:100%;border-radius:3px;background:var(--mute);transition:width .3s ease}
+.share-row.active .share-name{color:var(--ink);font-weight:500}
+.share-row.active .share-fill{background:var(--ink)}
+.share-empty{font-size:14px;color:var(--t3)}
+
 /* 달력 */
 .bar:hover .bar-fill{background:var(--t3)}
 .bar.current:hover .bar-fill{background:var(--ink)}
@@ -185,6 +200,19 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
   .layout{display:grid;grid-template-columns:minmax(0,5fr) minmax(0,6fr);gap:72px;align-items:start}
   .overview{position:sticky;top:92px}
   .hero-num{font-size:clamp(56px,6.4vw,88px)}
-  .bars{margin-bottom:0}
+  .share{margin-bottom:0}
   .ledger{margin-top:0}
 }
+/* 아주 넓은 화면: 요약 | 달력 | 장부 3단 */
+@media(min-width:1440px){
+  :root{--w:1600px}
+  .layout{grid-template-columns:minmax(0,4fr) minmax(0,5fr) minmax(0,4fr);gap:56px}
+  .detail{display:contents}
+  .calendar{position:sticky;top:92px;margin-bottom:0}
+  .hero-num{font-size:clamp(64px,4.6vw,96px)}
+  .cal-day{height:78px;font-size:14px;padding:8px 10px}
+  .cal-amt{font-size:12px}
+  .cal-title{font-size:22px}
+}
+/* 높이가 낮은 화면에서는 키 큰 요약 칸을 고정하지 않아 아래쪽이 가려지지 않게 합니다 */
+@media(min-width:1024px) and (max-height:899px){.overview{position:static}}

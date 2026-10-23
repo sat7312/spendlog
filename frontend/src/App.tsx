@@ -87,6 +87,29 @@ function Calendar({ records, month, day, onMonth, onDay }: {
   </section>;
 }
 
+// 한 달 동안 카테고리마다 얼마를 썼는지 비중 막대로 보여 줍니다. 줄을 누르면 그 카테고리로 넘어갑니다.
+function CategoryShare({ categories, records, month, selected, onPick }: {
+  categories: Category[]; records: ExpenseRecord[]; month: string; selected: string; onPick: (id: string) => void;
+}) {
+  const rows = categories.map(c => ({
+    c, value: records.filter(r => r.category === c.id && monthKey(r.date) === month).reduce((sum, r) => sum + r.amount, 0),
+  })).sort((a, b) => b.value - a.value);
+  const sum = rows.reduce((acc, row) => acc + row.value, 0);
+  return <section className="share" aria-label="카테고리별 비중">
+    <h2 className="bars-caption">{Number(month.slice(5, 7))}월 카테고리별 비중</h2>
+    {sum === 0 ? <p className="share-empty">이 달엔 기록이 없어요.</p>
+      : <ul>{rows.map(({ c, value }) => <li key={c.id}>
+        <button className={`share-row ${c.id === selected ? 'active' : ''}`} onClick={() => onPick(c.id)}
+          aria-label={`${c.name} ${money(value)}, ${Math.round((value / sum) * 100)}%`}>
+          <span className="share-name"><Icon name={c.icon} />{c.name}</span>
+          <span className="share-pct">{Math.round((value / sum) * 100)}%</span>
+          <span className="share-amt">{money(value)}</span>
+          <span className="share-track"><span className="share-fill" style={{ width: `${(value / sum) * 100}%` }} /></span>
+        </button>
+      </li>)}</ul>}
+  </section>;
+}
+
 export default function App({ user, onLogout }: { user: User; onLogout: () => void }) {
   const [data, setData] = useState<SpendlogData>(emptyData);
   const [selected, setSelected] = useState('');
@@ -266,6 +289,7 @@ export default function App({ user, onLogout }: { user: User; onLogout: () => vo
         </section>
 
         <MonthBars records={records} active={viewMonth} onPick={pickMonth} />
+        <CategoryShare categories={data.categories} records={data.records} month={viewMonth} selected={selected} onPick={pickCategory} />
       </div>
 
       <div className="detail">
