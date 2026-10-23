@@ -31,8 +31,8 @@ export default function Login({ onLogin }: { onLogin: (user: User) => void }) {
 
   return <div className="login-screen">
     <div className="login-card">
-      <div className="logo-area login-logo"><div className="logo-mark">S</div><div className="logo-text">SpendLog</div></div>
-      <p className="login-text">Google 계정으로 로그인하면 어느 기기에서든 내 가계부를 볼 수 있습니다.</p>
+      <h1 className="login-title">SpendLog</h1>
+      <p className="login-text">취미에 쓴 돈을 카테고리별로 적어 두는 가계부입니다.<br />로그인하면 어느 기기에서든 이어서 볼 수 있습니다.</p>
       {clientId && <div ref={buttonRef} className="login-button" />}
       {error && <div className="error-banner" role="alert">{error}</div>}
     </div>
