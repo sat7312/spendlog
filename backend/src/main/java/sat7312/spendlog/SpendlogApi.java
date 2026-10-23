@@ -1,13 +1,12 @@
 package sat7312.spendlog;
 
 import java.time.LocalDate;
-import java.util.HashSet;
+import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
-import java.util.function.Function;
-import java.util.stream.Collectors;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -41,76 +40,79 @@ public class SpendlogApi {
 
     @GetMapping("/data")
     @Transactional(readOnly = true)
-    public Data data() {
-        return new Data(categories.findAll().stream().map(this::toData).toList(),
-                records.findAll().stream().map(this::toData).toList());
+    public Data data(@AuthenticationPrincipal Jwt user) {
+        return data(user.getSubject());
+    }
+
+    private Data data(String owner) {
+        return new Data(categories.findByOwnerId(owner).stream().map(this::toData).toList(),
+                records.findByOwnerId(owner).stream().map(this::toData).toList());
     }
 
     @PostMapping("/categories")
-    public CategoryData addCategory(@RequestBody CategoryInput input) {
+    public CategoryData addCategory(@AuthenticationPrincipal Jwt user, @RequestBody CategoryInput input) {
         String name = required(input.name(), "카테고리 이름");
         String icon = icon(input.icon());
-        return toData(categories.save(new Category(UUID.randomUUID().toString(), name, icon)));
+        return toData(categories.save(new Category(UUID.randomUUID().toString(), user.getSubject(), name, icon)));
     }
 
     @DeleteMapping("/categories/{id}")
     @Transactional
-    public void deleteCategory(@PathVariable String id) {
-        Category category = category(id);
+    public void deleteCategory(@AuthenticationPrincipal Jwt user, @PathVariable String id) {
+        Category category = category(user, id);
         records.deleteByCategoryId(category.getId());
         categories.delete(category);
     }
 
     @PostMapping("/records")
-    public RecordData addRecord(@RequestBody RecordInput input) {
-        return toData(records.save(new ExpenseRecord(UUID.randomUUID().toString(), category(input.category()),
+    public RecordData addRecord(@AuthenticationPrincipal Jwt user, @RequestBody RecordInput input) {
+        return toData(records.save(new ExpenseRecord(UUID.randomUUID().toString(), category(user, input.category()),
                 required(input.name(), "항목명"), amount(input.amount()), date(input.date()))));
     }
 
     @PutMapping("/records/{id}")
-    public RecordData updateRecord(@PathVariable String id, @RequestBody RecordInput input) {
-        ExpenseRecord record = records.findById(id).orElseThrow(() -> notFound("기록"));
-        record.update(category(input.category()), required(input.name(), "항목명"),
+    public RecordData updateRecord(@AuthenticationPrincipal Jwt user, @PathVariable String id,
+            @RequestBody RecordInput input) {
+        ExpenseRecord record = records.findByIdAndOwnerId(id, user.getSubject()).orElseThrow(() -> notFound("기록"));
+        record.update(category(user, input.category()), required(input.name(), "항목명"),
                 amount(input.amount()), date(input.date()));
         return toData(records.save(record));
     }
 
     @DeleteMapping("/records/{id}")
-    public void deleteRecord(@PathVariable String id) {
-        if (!records.existsById(id)) throw notFound("기록");
-        records.deleteById(id);
+    public void deleteRecord(@AuthenticationPrincipal Jwt user, @PathVariable String id) {
+        records.delete(records.findByIdAndOwnerId(id, user.getSubject()).orElseThrow(() -> notFound("기록")));
     }
 
+    /** 백업의 ID는 다른 사용자와 겹칠 수 있으므로 카테고리와 기록 ID를 새로 발급합니다. */
     @PutMapping("/data")
     @Transactional
-    public Data restore(@RequestBody Data input) {
+    public Data restore(@AuthenticationPrincipal Jwt user, @RequestBody Data input) {
         if (input == null || input.categories() == null || input.records() == null) {
             throw badRequest("올바른 백업 파일이 아닙니다");
         }
-        var ids = new HashSet<String>();
-        var newCategories = input.categories().stream().map(c -> {
+        String owner = user.getSubject();
+        var byBackupId = new HashMap<String, Category>();
+        for (CategoryData c : input.categories()) {
             if (c == null) throw badRequest("올바른 카테고리 데이터가 아닙니다");
-            String id = required(c.id(), "카테고리 ID");
-            if (!ids.add(id)) throw badRequest("카테고리 ID가 중복되었습니다");
-            return new Category(id, required(c.name(), "카테고리 이름"), icon(c.icon()));
-        }).toList();
-        Map<String, Category> byId = newCategories.stream()
-                .collect(Collectors.toMap(Category::getId, Function.identity()));
-        ids.clear();
+            String backupId = required(c.id(), "카테고리 ID");
+            var category = new Category(UUID.randomUUID().toString(), owner,
+                    required(c.name(), "카테고리 이름"), icon(c.icon()));
+            if (byBackupId.putIfAbsent(backupId, category) != null) throw badRequest("카테고리 ID가 중복되었습니다");
+        }
         var newRecords = input.records().stream().map(r -> {
             if (r == null) throw badRequest("올바른 기록 데이터가 아닙니다");
-            String id = required(r.id(), "기록 ID");
-            if (!ids.add(id)) throw badRequest("기록 ID가 중복되었습니다");
-            Category category = byId.get(r.category());
+            Category category = byBackupId.get(r.category());
             if (category == null) throw badRequest("기록의 카테고리를 찾을 수 없습니다");
-            return new ExpenseRecord(id, category, required(r.name(), "항목명"),
+            return new ExpenseRecord(UUID.randomUUID().toString(), category, required(r.name(), "항목명"),
                     amount(r.amount()), date(r.date()));
         }).toList();
-        records.deleteAllInBatch();
-        categories.deleteAllInBatch();
-        categories.saveAll(newCategories);
+        records.deleteByOwnerId(owner);
+        categories.deleteByOwnerId(owner);
+        records.flush();
+        categories.saveAll(byBackupId.values());
         records.saveAll(newRecords);
-        return data();
+        return data(owner);
     }
 
     private CategoryData toData(Category c) {
@@ -121,8 +123,9 @@ public class SpendlogApi {
         return new RecordData(r.getId(), r.getCategory().getId(), r.getName(), r.getAmount(), r.getDate());
     }
 
-    private Category category(String id) {
-        return categories.findById(id).orElseThrow(() -> notFound("카테고리"));
+    private Category category(Jwt user, String id) {
+        if (id == null) throw notFound("카테고리");
+        return categories.findByIdAndOwnerId(id, user.getSubject()).orElseThrow(() -> notFound("카테고리"));
     }
 
     private String required(String value, String label) {

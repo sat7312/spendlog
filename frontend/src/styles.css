@@ -125,6 +125,13 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
 .error-banner{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 14px;margin-bottom:16px;border-radius:8px;background:rgba(217,68,68,.1);color:var(--danger);font-size:13px}
 .error-banner button{border:0;background:none;color:inherit;font-size:20px;cursor:pointer}
 button:disabled{opacity:.55;cursor:not-allowed}
+.user-info{padding:9px 12px 4px;font-size:12px;color:var(--t2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.login-screen{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:16px}
+.login-card{width:100%;max-width:360px;padding:32px 28px;border:.5px solid var(--border);border-radius:14px;background:var(--side-bg);display:flex;flex-direction:column;align-items:center;gap:18px;text-align:center}
+.login-card .login-logo{margin:0;padding:0}
+.login-text{font-size:14px;line-height:1.6;color:var(--t2)}
+.login-button{min-height:44px}
+.login-card .error-banner{margin:0;width:100%}
 @media(max-width:760px){
   #app{display:block}
   #sidebar{position:static;width:100%;min-width:0;min-height:0;display:flex;flex-direction:row;flex-wrap:wrap;align-items:center;gap:4px;padding:10px;border-right:0;border-bottom:.5px solid var(--border)}
@@ -132,7 +139,8 @@ button:disabled{opacity:.55;cursor:not-allowed}
   .nav-label{display:none}
   .nav-item,.theme-btn{width:auto;padding:8px 10px}
   .nav-item span,.theme-btn span{display:none}
-  .sidebar-bottom{margin:0;padding:0;border:0}
+  .sidebar-bottom{margin:0;padding:0;border:0;flex-direction:row}
+  .user-info{display:none}
   #main{margin-left:0;padding:20px 16px}
   .metrics{grid-template-columns:1fr 1fr}
   .metric-card:last-child{grid-column:1/-1}

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { api, type Category, type ExpenseRecord, type RecordInput, type SpendlogData } from './api';
+import { api, type Category, type ExpenseRecord, type RecordInput, type SpendlogData, type User } from './api';
 
 const icons = ['ti-device-gamepad-2', 'ti-palette', 'ti-plane', 'ti-music', 'ti-book', 'ti-camera',
   'ti-run', 'ti-trophy', 'ti-pizza', 'ti-shirt', 'ti-ball-football', 'ti-headphones'];
@@ -49,7 +49,7 @@ function TrendChart({ records, color }: { records: ExpenseRecord[]; color: strin
   </div>;
 }
 
-export default function App() {
+export default function App({ user, onLogout }: { user: User; onLogout: () => void }) {
   const [data, setData] = useState<SpendlogData>(emptyData);
   const [selected, setSelected] = useState('');
   const [theme, setTheme] = useState<'light' | 'dark'>(() => localStorage.getItem('spendlog_theme') === 'dark' ? 'dark' : 'light');
@@ -171,7 +171,9 @@ export default function App() {
       <input ref={fileRef} type="file" accept=".json,application/json" hidden onChange={e => void importData(e.target.files?.[0])} />
       <div className="sidebar-bottom"><button className="theme-btn" onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}>
         <Icon name={theme === 'light' ? 'ti-sun' : 'ti-moon'} /><span>{theme === 'light' ? '다크 모드' : '라이트 모드'}</span>
-      </button></div>
+      </button>
+        <div className="user-info" title={user.email}>{user.name || user.email}</div>
+        <button className="theme-btn" onClick={onLogout}><Icon name="ti-logout" /><span>로그아웃</span></button></div>
     </aside>
     <main id="main">
       {error && <div className="error-banner" role="alert">{error}<button onClick={() => setError('')} aria-label="닫기">×</button></div>}
