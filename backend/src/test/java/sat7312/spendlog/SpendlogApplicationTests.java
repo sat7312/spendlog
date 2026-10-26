@@ -204,6 +204,102 @@ class SpendlogApplicationTests {
         assertThat(after).isEqualTo(before);
     }
 
+    private static final String AMOUNT_RANGE_ERROR = "금액은 1원부터 10억 원까지 입력해 주세요";
+
+    private static String recordInputWithAmount(String category, String name, long amount) {
+        return "{\"category\":\"" + category + "\",\"name\":\"" + name + "\",\"amount\":" + amount
+                + ",\"date\":\"2026-06-01\"}";
+    }
+
+    /** 정상 기록 뒤에 지정한 금액의 기록이 오는 백업입니다. */
+    private static String backupWithAmount(long amount) {
+        return """
+                {"categories":[{"id":"games","name":"게임","icon":"ti-device-gamepad-2"}],
+                 "records":[{"id":"r1","category":"games","name":"스팀","amount":52000,"date":"2026-06-02"},
+                            {"id":"r2","category":"games","name":"패키지","amount":%d,"date":"2026-06-01"}]}
+                """.formatted(amount);
+    }
+
+    private static java.util.Map<String, Object> recordWhere(String data, String field, String value) {
+        List<java.util.Map<String, Object>> found =
+                com.jayway.jsonpath.JsonPath.read(data, "$.records[?(@." + field + " == '" + value + "')]");
+        assertThat(found).hasSize(1);
+        return found.get(0);
+    }
+
+    private static long amountOf(java.util.Map<String, Object> record) {
+        return ((Number) record.get("amount")).longValue();
+    }
+
+    @Test
+    void acceptsRecordAmountsFromOneToOneBillion() throws Exception {
+        String data = restoreBackup("paul");
+        String category = com.jayway.jsonpath.JsonPath.read(data, "$.categories[0].id");
+        String recordId = com.jayway.jsonpath.JsonPath.read(data, "$.records[0].id");
+        restoreBackup("quinn");
+
+        for (long amount : new long[] {1, 52000, 1_000_000_000L}) {
+            String created = mvc.perform(post("/api/records").with(user("paul")).contentType(MediaType.APPLICATION_JSON)
+                            .content(recordInputWithAmount(category, "생성 " + amount, amount)))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.amount").value(amount))
+                    .andReturn().getResponse().getContentAsString();
+            String createdId = com.jayway.jsonpath.JsonPath.read(created, "$.id");
+            var stored = recordWhere(dataOf("paul"), "id", createdId);
+            assertThat(amountOf(stored)).isEqualTo(amount);
+            assertThat(stored.get("category")).isEqualTo(category);
+
+            mvc.perform(put("/api/records/" + recordId).with(user("paul")).contentType(MediaType.APPLICATION_JSON)
+                            .content(recordInputWithAmount(category, "수정", amount)))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.id").value(recordId))
+                    .andExpect(jsonPath("$.amount").value(amount));
+            assertThat(amountOf(recordWhere(dataOf("paul"), "id", recordId))).isEqualTo(amount);
+
+            // 기존 데이터가 있는 사용자에게 복원하면 백업 데이터로 교체되어야 합니다.
+            String restored = mvc.perform(put("/api/data").with(user("quinn")).contentType(MediaType.APPLICATION_JSON)
+                            .content(backupWithAmount(amount)))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.categories", hasSize(1)))
+                    .andExpect(jsonPath("$.records", hasSize(2)))
+                    .andReturn().getResponse().getContentAsString();
+            assertThat(dataOf("quinn")).isEqualTo(restored);
+            String restoredCategory = com.jayway.jsonpath.JsonPath.read(restored, "$.categories[0].id");
+            var restoredRecord = recordWhere(restored, "name", "패키지");
+            assertThat(amountOf(restoredRecord)).isEqualTo(amount);
+            assertThat(restoredRecord.get("category")).isEqualTo(restoredCategory);
+            assertThat(amountOf(recordWhere(restored, "name", "스팀"))).isEqualTo(52000);
+        }
+    }
+
+    @Test
+    void rejectsRecordAmountsOutsideRangeWithoutChangingData() throws Exception {
+        String before = restoreBackup("rose");
+        String category = com.jayway.jsonpath.JsonPath.read(before, "$.categories[0].id");
+        String recordId = com.jayway.jsonpath.JsonPath.read(before, "$.records[0].id");
+
+        for (long amount : new long[] {Long.MIN_VALUE, -1, 0, 1_000_000_001L, Long.MAX_VALUE}) {
+            mvc.perform(post("/api/records").with(user("rose")).contentType(MediaType.APPLICATION_JSON)
+                            .content(recordInputWithAmount(category, "점심", amount)))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(reason(AMOUNT_RANGE_ERROR));
+            assertThat(dataOf("rose")).isEqualTo(before);
+
+            mvc.perform(put("/api/records/" + recordId).with(user("rose")).contentType(MediaType.APPLICATION_JSON)
+                            .content(recordInputWithAmount(category, "점심", amount)))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(reason(AMOUNT_RANGE_ERROR));
+            assertThat(dataOf("rose")).isEqualTo(before);
+
+            // 정상 기록 뒤에 범위 밖 금액이 있어도 복원 전체가 거부되어야 합니다.
+            mvc.perform(put("/api/data").with(user("rose")).contentType(MediaType.APPLICATION_JSON)
+                            .content(backupWithAmount(amount)))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(reason(AMOUNT_RANGE_ERROR));
+            assertThat(dataOf("rose")).isEqualTo(before);
+        }
+    }
+
     private static final String DUPLICATE_NAME_ERROR = "이미 있는 카테고리 이름입니다";
     private static final List<String> GAMES_VARIANTS = List.of("Games", "games", " Games ", " gAmEs ");
 

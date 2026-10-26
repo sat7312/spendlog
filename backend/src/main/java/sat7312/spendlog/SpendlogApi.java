@@ -28,6 +28,7 @@ public class SpendlogApi {
             "ti-device-gamepad-2", "ti-palette", "ti-plane", "ti-music", "ti-book", "ti-camera",
             "ti-run", "ti-trophy", "ti-pizza", "ti-shirt", "ti-ball-football", "ti-headphones");
     private static final LocalDate MIN_DATE = LocalDate.of(2000, 1, 1);
+    private static final long MAX_AMOUNT = 1_000_000_000L;
     private static final String DUPLICATE_CATEGORY_NAME = "이미 있는 카테고리 이름입니다";
     private final CategoryRepository categories;
     private final ExpenseRecordRepository records;
@@ -177,7 +178,7 @@ public class SpendlogApi {
     }
 
     private long amount(long value) {
-        if (value <= 0) throw badRequest("금액은 0보다 커야 합니다");
+        if (value < 1 || value > MAX_AMOUNT) throw badRequest("금액은 1원부터 10억 원까지 입력해 주세요");
         return value;
     }
 
