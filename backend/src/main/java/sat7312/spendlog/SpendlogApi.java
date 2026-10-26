@@ -151,11 +151,13 @@ public class SpendlogApi {
         return categories.findByIdAndOwnerId(id, user.getSubject()).orElseThrow(() -> notFound("카테고리"));
     }
 
+    /** 앞뒤 공백을 제거한 값으로 길이를 검사하고 그 값을 돌려줍니다. */
     private String required(String value, String label) {
-        if (value == null || value.isBlank() || value.length() > 120) {
+        String trimmed = value == null ? null : value.trim();
+        if (trimmed == null || trimmed.isBlank() || trimmed.length() > 120) {
             throw badRequest(label + "을(를) 1~120자로 입력해 주세요");
         }
-        return value.trim();
+        return trimmed;
     }
 
     /** 같은 사용자의 카테고리 중 excludedId를 제외하고 이름이 겹치면 거부합니다. */
