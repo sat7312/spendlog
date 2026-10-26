@@ -203,4 +203,174 @@ class SpendlogApplicationTests {
                 .andReturn().getResponse().getContentAsString();
         assertThat(after).isEqualTo(before);
     }
+
+    private static final String DUPLICATE_NAME_ERROR = "이미 있는 카테고리 이름입니다";
+    private static final List<String> GAMES_VARIANTS = List.of("Games", "games", " Games ", " gAmEs ");
+
+    private static String categoryInput(String name, String icon) {
+        return "{\"name\":\"" + name + "\",\"icon\":\"" + icon + "\"}";
+    }
+
+    private static String backupWithCategories(String first, String second) {
+        return """
+                {"categories":[{"id":"a","name":"%s","icon":"ti-device-gamepad-2"},
+                               {"id":"b","name":"%s","icon":"ti-plane"}],
+                 "records":[{"id":"r1","category":"b","name":"항공권","amount":300000,"date":"2026-06-01"}]}
+                """.formatted(first, second);
+    }
+
+    private String dataOf(String owner) throws Exception {
+        return mvc.perform(get("/api/data").with(user(owner))).andReturn().getResponse().getContentAsString();
+    }
+
+    private static String categoryIdByName(String data, String name) {
+        List<String> ids = com.jayway.jsonpath.JsonPath.read(data, "$.categories[?(@.name == '" + name + "')].id");
+        assertThat(ids).hasSize(1);
+        return ids.get(0);
+    }
+
+    private String createCategory(String owner, String name, String icon) throws Exception {
+        String body = mvc.perform(post("/api/categories").with(user(owner)).contentType(MediaType.APPLICATION_JSON)
+                        .content(categoryInput(name, icon)))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        return com.jayway.jsonpath.JsonPath.read(body, "$.id");
+    }
+
+    @Test
+    void rejectsDuplicateCategoryNamesOnCreate() throws Exception {
+        String gamesId = createCategory("ivy", "Games", "ti-device-gamepad-2");
+        String before = dataOf("ivy");
+
+        for (String name : GAMES_VARIANTS) {
+            mvc.perform(post("/api/categories").with(user("ivy")).contentType(MediaType.APPLICATION_JSON)
+                            .content(categoryInput(name, "ti-trophy")))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(reason(DUPLICATE_NAME_ERROR));
+            assertThat(dataOf("ivy")).isEqualTo(before);
+        }
+        mvc.perform(get("/api/data").with(user("ivy")))
+                .andExpect(jsonPath("$.categories", hasSize(1)))
+                .andExpect(jsonPath("$.categories[0].id").value(gamesId))
+                .andExpect(jsonPath("$.categories[0].name").value("Games"))
+                .andExpect(jsonPath("$.categories[0].icon").value("ti-device-gamepad-2"));
+
+        // 다른 사용자의 이름과는 비교하지 않습니다.
+        createCategory("jack", "Games", "ti-device-gamepad-2");
+
+        mvc.perform(post("/api/categories").with(user("ivy")).contentType(MediaType.APPLICATION_JSON)
+                        .content(categoryInput(" Travel ", "ti-plane")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.name").value("Travel"));
+        mvc.perform(get("/api/data").with(user("ivy"))).andExpect(jsonPath("$.categories", hasSize(2)));
+    }
+
+    @Test
+    void rejectsDuplicateCategoryNamesOnUpdateExceptItself() throws Exception {
+        mvc.perform(put("/api/data").with(user("kate")).contentType(MediaType.APPLICATION_JSON)
+                        .content(backupWithCategories("Games", "Travel")))
+                .andExpect(status().isOk());
+        String before = dataOf("kate");
+        String gamesId = categoryIdByName(before, "Games");
+        String travelId = categoryIdByName(before, "Travel");
+
+        for (String name : GAMES_VARIANTS) {
+            mvc.perform(put("/api/categories/" + travelId).with(user("kate")).contentType(MediaType.APPLICATION_JSON)
+                            .content(categoryInput(name, "ti-trophy")))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(reason(DUPLICATE_NAME_ERROR));
+            assertThat(dataOf("kate")).isEqualTo(before);
+        }
+
+        // 자기 자신의 이름은 그대로 두거나 공백·대소문자만 바꿔도 됩니다.
+        mvc.perform(put("/api/categories/" + gamesId).with(user("kate")).contentType(MediaType.APPLICATION_JSON)
+                        .content(categoryInput("Games", "ti-device-gamepad-2")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(gamesId))
+                .andExpect(jsonPath("$.name").value("Games"));
+        mvc.perform(put("/api/categories/" + gamesId).with(user("kate")).contentType(MediaType.APPLICATION_JSON)
+                        .content(categoryInput(" games ", "ti-device-gamepad-2")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(gamesId))
+                .andExpect(jsonPath("$.name").value("games"));
+        mvc.perform(put("/api/categories/" + travelId).with(user("kate")).contentType(MediaType.APPLICATION_JSON)
+                        .content(categoryInput("Travel", "ti-camera")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(travelId))
+                .andExpect(jsonPath("$.name").value("Travel"))
+                .andExpect(jsonPath("$.icon").value("ti-camera"));
+        mvc.perform(get("/api/data").with(user("kate")))
+                .andExpect(jsonPath("$.categories", hasSize(2)))
+                .andExpect(jsonPath("$.records", hasSize(1)))
+                .andExpect(jsonPath("$.records[0].category").value(travelId));
+
+        // 다른 사용자에게만 있는 이름으로는 바꿀 수 있습니다.
+        createCategory("liam", "Music", "ti-music");
+        mvc.perform(put("/api/categories/" + travelId).with(user("kate")).contentType(MediaType.APPLICATION_JSON)
+                        .content(categoryInput("Music", "ti-music")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.name").value("Music"));
+
+        // 다른 사용자의 카테고리 ID나 없는 ID는 기존대로 404입니다.
+        mvc.perform(put("/api/categories/" + travelId).with(user("liam")).contentType(MediaType.APPLICATION_JSON)
+                        .content(categoryInput("Games", "ti-music")))
+                .andExpect(status().isNotFound());
+        mvc.perform(put("/api/categories/missing").with(user("kate")).contentType(MediaType.APPLICATION_JSON)
+                        .content(categoryInput("Games", "ti-music")))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void rejectsDuplicateCategoryNamesInBackup() throws Exception {
+        String before = restoreBackup("mia");
+
+        for (String name : GAMES_VARIANTS) {
+            mvc.perform(put("/api/data").with(user("mia")).contentType(MediaType.APPLICATION_JSON)
+                            .content(backupWithCategories("Games", name)))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(reason(DUPLICATE_NAME_ERROR));
+            assertThat(dataOf("mia")).isEqualTo(before);
+        }
+
+        // 현재 데이터와 같은 이름이나 다른 사용자의 이름은 백업 안에서 겹치지 않으면 허용합니다.
+        createCategory("noah", "Travel", "ti-plane");
+        String restored = mvc.perform(put("/api/data").with(user("mia")).contentType(MediaType.APPLICATION_JSON)
+                        .content(backupWithCategories("게임", " Travel ")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.categories", hasSize(2)))
+                .andExpect(jsonPath("$.records", hasSize(1)))
+                .andReturn().getResponse().getContentAsString();
+        String travelId = categoryIdByName(restored, "Travel");
+        assertThat(travelId).isNotEqualTo("b");
+        assertThat(categoryIdByName(restored, "게임")).isNotEqualTo("a");
+        assertThat((String) com.jayway.jsonpath.JsonPath.read(restored, "$.records[0].category")).isEqualTo(travelId);
+    }
+
+    @Test
+    void keepsExistingBackupValidation() throws Exception {
+        String before = restoreBackup("olivia");
+        String[][] cases = {
+                {"""
+                 {"categories":[{"id":"a","name":"A","icon":"ti-plane"},{"id":"a","name":"B","icon":"ti-plane"}],
+                  "records":[]}
+                 """, "카테고리 ID가 중복되었습니다"},
+                {"""
+                 {"categories":[{"id":"a","name":" ","icon":"ti-plane"}],"records":[]}
+                 """, "카테고리 이름을(를) 1~120자로 입력해 주세요"},
+                {"""
+                 {"categories":[{"id":"a","name":"A","icon":"ti-unknown"}],"records":[]}
+                 """, "지원하지 않는 아이콘입니다"}};
+        for (String[] c : cases) {
+            mvc.perform(put("/api/data").with(user("olivia")).contentType(MediaType.APPLICATION_JSON).content(c[0]))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(reason(c[1]));
+            assertThat(dataOf("olivia")).isEqualTo(before);
+        }
+
+        mvc.perform(put("/api/data").with(user("olivia")).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"categories\":[],\"records\":[]}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.categories", hasSize(0)))
+                .andExpect(jsonPath("$.records", hasSize(0)));
+    }
 }

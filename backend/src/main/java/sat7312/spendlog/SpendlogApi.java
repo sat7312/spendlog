@@ -3,7 +3,9 @@ package sat7312.spendlog;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -26,6 +28,7 @@ public class SpendlogApi {
             "ti-device-gamepad-2", "ti-palette", "ti-plane", "ti-music", "ti-book", "ti-camera",
             "ti-run", "ti-trophy", "ti-pizza", "ti-shirt", "ti-ball-football", "ti-headphones");
     private static final LocalDate MIN_DATE = LocalDate.of(2000, 1, 1);
+    private static final String DUPLICATE_CATEGORY_NAME = "이미 있는 카테고리 이름입니다";
     private final CategoryRepository categories;
     private final ExpenseRecordRepository records;
     private final Clock clock;
@@ -57,6 +60,7 @@ public class SpendlogApi {
     public CategoryData addCategory(@AuthenticationPrincipal Jwt user, @RequestBody CategoryInput input) {
         String name = required(input.name(), "카테고리 이름");
         String icon = icon(input.icon());
+        requireUniqueCategoryName(user.getSubject(), name, null);
         return toData(categories.save(new Category(UUID.randomUUID().toString(), user.getSubject(), name, icon)));
     }
 
@@ -65,7 +69,10 @@ public class SpendlogApi {
     public CategoryData updateCategory(@AuthenticationPrincipal Jwt user, @PathVariable String id,
             @RequestBody CategoryInput input) {
         Category category = category(user, id);
-        category.update(required(input.name(), "카테고리 이름"), icon(input.icon()));
+        String name = required(input.name(), "카테고리 이름");
+        String icon = icon(input.icon());
+        requireUniqueCategoryName(user.getSubject(), name, category.getId());
+        category.update(name, icon);
         return toData(categories.save(category));
     }
 
@@ -106,12 +113,14 @@ public class SpendlogApi {
         }
         String owner = user.getSubject();
         var byBackupId = new HashMap<String, Category>();
+        var names = new HashSet<String>();
         for (CategoryData c : input.categories()) {
             if (c == null) throw badRequest("올바른 카테고리 데이터가 아닙니다");
             String backupId = required(c.id(), "카테고리 ID");
             var category = new Category(UUID.randomUUID().toString(), owner,
                     required(c.name(), "카테고리 이름"), icon(c.icon()));
             if (byBackupId.putIfAbsent(backupId, category) != null) throw badRequest("카테고리 ID가 중복되었습니다");
+            if (!names.add(categoryNameKey(category.getName()))) throw badRequest(DUPLICATE_CATEGORY_NAME);
         }
         var newRecords = input.records().stream().map(r -> {
             if (r == null) throw badRequest("올바른 기록 데이터가 아닙니다");
@@ -146,6 +155,20 @@ public class SpendlogApi {
             throw badRequest(label + "을(를) 1~120자로 입력해 주세요");
         }
         return value.trim();
+    }
+
+    /** 같은 사용자의 카테고리 중 excludedId를 제외하고 이름이 겹치면 거부합니다. */
+    private void requireUniqueCategoryName(String owner, String name, String excludedId) {
+        String key = categoryNameKey(name);
+        boolean duplicated = categories.findByOwnerId(owner).stream()
+                .filter(c -> !c.getId().equals(excludedId))
+                .anyMatch(c -> categoryNameKey(c.getName()).equals(key));
+        if (duplicated) throw badRequest(DUPLICATE_CATEGORY_NAME);
+    }
+
+    /** 카테고리 이름은 앞뒤 공백을 제거하고 대소문자를 구분하지 않고 비교합니다. */
+    private static String categoryNameKey(String name) {
+        return name.trim().toLowerCase(Locale.ROOT);
     }
 
     private String icon(String value) {
