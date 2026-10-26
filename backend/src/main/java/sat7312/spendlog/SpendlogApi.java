@@ -1,5 +1,6 @@
 package sat7312.spendlog;
 
+import java.time.Clock;
 import java.time.LocalDate;
 import java.util.HashMap;
 import java.util.List;
@@ -24,12 +25,15 @@ public class SpendlogApi {
     private static final List<String> ICONS = List.of(
             "ti-device-gamepad-2", "ti-palette", "ti-plane", "ti-music", "ti-book", "ti-camera",
             "ti-run", "ti-trophy", "ti-pizza", "ti-shirt", "ti-ball-football", "ti-headphones");
+    private static final LocalDate MIN_DATE = LocalDate.of(2000, 1, 1);
     private final CategoryRepository categories;
     private final ExpenseRecordRepository records;
+    private final Clock clock;
 
-    public SpendlogApi(CategoryRepository categories, ExpenseRecordRepository records) {
+    public SpendlogApi(CategoryRepository categories, ExpenseRecordRepository records, Clock clock) {
         this.categories = categories;
         this.records = records;
+        this.clock = clock;
     }
 
     public record CategoryData(String id, String name, String icon) {}
@@ -156,6 +160,9 @@ public class SpendlogApi {
 
     private LocalDate date(LocalDate value) {
         if (value == null) throw badRequest("날짜를 입력해 주세요");
+        if (value.isBefore(MIN_DATE) || value.isAfter(LocalDate.now(clock))) {
+            throw badRequest("날짜는 2000-01-01부터 오늘까지 입력해 주세요");
+        }
         return value;
     }
 
