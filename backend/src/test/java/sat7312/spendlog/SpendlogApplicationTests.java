@@ -469,4 +469,139 @@ class SpendlogApplicationTests {
                 .andExpect(jsonPath("$.categories", hasSize(0)))
                 .andExpect(jsonPath("$.records", hasSize(0)));
     }
+
+    private static final String CATEGORY_NAME_ERROR = "카테고리 이름을(를) 1~120자로 입력해 주세요";
+    private static final String RECORD_NAME_ERROR = "항목명을(를) 1~120자로 입력해 주세요";
+    private static final String CATEGORY_ID_ERROR = "카테고리 ID을(를) 1~120자로 입력해 주세요";
+
+    /** 입력값과 앞뒤 공백을 제거한 기대값입니다. 기대값은 1자 또는 120자입니다. */
+    private static final String[][] TRIMMED_TEXTS = {
+            {"A", "A"},
+            {" B ", "B"},
+            {"가".repeat(120), "가".repeat(120)},
+            {" " + "나".repeat(120) + " ", "나".repeat(120)},
+            {"   " + "다".repeat(120) + "  ", "다".repeat(120)}};
+
+    /** 공백만 있거나 공백을 제거해도 120자를 넘는 입력입니다. null은 필드를 생략합니다. */
+    private static final List<String> INVALID_TEXTS = java.util.Arrays.asList(
+            null, "", "   ", "　", "가".repeat(121), " " + "가".repeat(121) + " ");
+
+    /** value가 null이면 필드를 생략합니다. */
+    private static String field(String key, String value) {
+        return value == null ? "" : "\"" + key + "\":\"" + value + "\",";
+    }
+
+    private static String categoryJson(String name) {
+        return "{" + field("name", name) + "\"icon\":\"ti-plane\"}";
+    }
+
+    private static String recordJson(String category, String name) {
+        return "{" + field("category", category) + field("name", name) + "\"amount\":12000,\"date\":\"2026-06-01\"}";
+    }
+
+    private static String backupJson(String categoryId, String categoryName, String recordCategory,
+            String recordName) {
+        return "{\"categories\":[{" + field("id", categoryId) + field("name", categoryName)
+                + "\"icon\":\"ti-plane\"}],\"records\":[" + recordJson(recordCategory, recordName) + "]}";
+    }
+
+    @Test
+    void acceptsTextsUpToMaxLengthAfterTrimming() throws Exception {
+        // 생성은 tina, 수정은 uma의 기존 카테고리와 기록으로 확인합니다.
+        String tinaCategory = categoryIdByName(restoreBackup("tina"), "게임");
+        String umaData = restoreBackup("uma");
+        String umaCategory = categoryIdByName(umaData, "게임");
+        String umaRecord = com.jayway.jsonpath.JsonPath.read(umaData, "$.records[0].id");
+
+        for (String[] c : TRIMMED_TEXTS) {
+            String created = mvc.perform(post("/api/categories").with(user("tina"))
+                            .contentType(MediaType.APPLICATION_JSON).content(categoryJson(c[0])))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.name").value(c[1]))
+                    .andReturn().getResponse().getContentAsString();
+            assertThat(categoryIdByName(dataOf("tina"), c[1]))
+                    .isEqualTo(com.jayway.jsonpath.JsonPath.read(created, "$.id"));
+
+            mvc.perform(put("/api/categories/" + umaCategory).with(user("uma"))
+                            .contentType(MediaType.APPLICATION_JSON).content(categoryJson(c[0])))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.id").value(umaCategory))
+                    .andExpect(jsonPath("$.name").value(c[1]));
+            assertThat(categoryIdByName(dataOf("uma"), c[1])).isEqualTo(umaCategory);
+
+            String record = mvc.perform(post("/api/records").with(user("tina"))
+                            .contentType(MediaType.APPLICATION_JSON).content(recordJson(tinaCategory, c[0])))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.name").value(c[1]))
+                    .andReturn().getResponse().getContentAsString();
+            String recordId = com.jayway.jsonpath.JsonPath.read(record, "$.id");
+            assertThat(recordWhere(dataOf("tina"), "id", recordId).get("name")).isEqualTo(c[1]);
+
+            mvc.perform(put("/api/records/" + umaRecord).with(user("uma"))
+                            .contentType(MediaType.APPLICATION_JSON).content(recordJson(umaCategory, c[0])))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.id").value(umaRecord))
+                    .andExpect(jsonPath("$.name").value(c[1]));
+            assertThat(recordWhere(dataOf("uma"), "id", umaRecord).get("name")).isEqualTo(c[1]);
+
+            // 백업의 카테고리 ID도 공백을 제거한 값으로 기록의 카테고리 참조와 연결됩니다.
+            String restored = mvc.perform(put("/api/data").with(user("vera")).contentType(MediaType.APPLICATION_JSON)
+                            .content(backupJson(c[0], c[0], c[1], c[0])))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.categories", hasSize(1)))
+                    .andExpect(jsonPath("$.records", hasSize(1)))
+                    .andExpect(jsonPath("$.categories[0].name").value(c[1]))
+                    .andExpect(jsonPath("$.records[0].name").value(c[1]))
+                    .andReturn().getResponse().getContentAsString();
+            String restoredCategory = com.jayway.jsonpath.JsonPath.read(restored, "$.categories[0].id");
+            assertThat(restoredCategory).isNotEqualTo(c[1]);
+            assertThat((String) com.jayway.jsonpath.JsonPath.read(restored, "$.records[0].category"))
+                    .isEqualTo(restoredCategory);
+            assertThat(dataOf("vera")).isEqualTo(restored);
+        }
+    }
+
+    @Test
+    void rejectsBlankOrTooLongTextsWithoutChangingData() throws Exception {
+        String before = restoreBackup("will");
+        String category = categoryIdByName(before, "게임");
+        String recordId = com.jayway.jsonpath.JsonPath.read(before, "$.records[0].id");
+
+        for (String text : INVALID_TEXTS) {
+            mvc.perform(post("/api/categories").with(user("will")).contentType(MediaType.APPLICATION_JSON)
+                            .content(categoryJson(text)))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(reason(CATEGORY_NAME_ERROR));
+            assertThat(dataOf("will")).isEqualTo(before);
+
+            mvc.perform(put("/api/categories/" + category).with(user("will")).contentType(MediaType.APPLICATION_JSON)
+                            .content(categoryJson(text)))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(reason(CATEGORY_NAME_ERROR));
+            assertThat(dataOf("will")).isEqualTo(before);
+
+            mvc.perform(post("/api/records").with(user("will")).contentType(MediaType.APPLICATION_JSON)
+                            .content(recordJson(category, text)))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(reason(RECORD_NAME_ERROR));
+            assertThat(dataOf("will")).isEqualTo(before);
+
+            mvc.perform(put("/api/records/" + recordId).with(user("will")).contentType(MediaType.APPLICATION_JSON)
+                            .content(recordJson(category, text)))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(reason(RECORD_NAME_ERROR));
+            assertThat(dataOf("will")).isEqualTo(before);
+
+            String[][] backups = {
+                    {backupJson("a", text, "a", "A"), CATEGORY_NAME_ERROR},
+                    {backupJson("a", "A", "a", text), RECORD_NAME_ERROR},
+                    {backupJson(text, "A", "a", "A"), CATEGORY_ID_ERROR}};
+            for (String[] b : backups) {
+                mvc.perform(put("/api/data").with(user("will")).contentType(MediaType.APPLICATION_JSON).content(b[0]))
+                        .andExpect(status().isBadRequest())
+                        .andExpect(reason(b[1]));
+                assertThat(dataOf("will")).isEqualTo(before);
+            }
+        }
+    }
 }
