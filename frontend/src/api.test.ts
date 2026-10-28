@@ -56,6 +56,50 @@ describe('auth with working storage', () => {
   });
 });
 
+describe('auth when storage starts failing after a successful read', () => {
+  /** getItem이 blocked.value가 true일 때만 예외를 던지는 저장소입니다. */
+  function stubSwitchableStorage(values: Map<string, string>) {
+    const blocked = { value: false };
+    vi.stubGlobal('localStorage', {
+      getItem: (key: string) => {
+        if (blocked.value) throw new DOMException('storage blocked', 'SecurityError');
+        return values.get(key) ?? null;
+      },
+      setItem: (key: string, value: string) => { values.set(key, value); },
+      removeItem: (key: string) => { values.delete(key); },
+    });
+    return blocked;
+  }
+
+  it('keeps the token restored from storage', async () => {
+    const blocked = stubSwitchableStorage(new Map([['spendlog_token', 'token-1']]));
+    const { api, auth } = await loadApi();
+    expect(auth.token()).toBe('token-1');
+
+    blocked.value = true;
+    expect(auth.token()).toBe('token-1');
+    const headers = stubFetch();
+    await api.data();
+    expect(headers).toEqual(['Bearer token-1']);
+  });
+
+  it('does not bring back a token removed by another tab', async () => {
+    const values = new Map<string, string>();
+    const blocked = stubSwitchableStorage(values);
+    const { api, auth } = await loadApi();
+    auth.save('token-1');
+
+    values.delete('spendlog_token');
+    expect(auth.token()).toBeNull();
+
+    blocked.value = true;
+    expect(auth.token()).toBeNull();
+    const headers = stubFetch();
+    await api.data();
+    expect(headers).toEqual([undefined]);
+  });
+});
+
 describe.each<Failing[]>([['getItem'], ['setItem'], ['removeItem'], ['getItem', 'setItem', 'removeItem']])(
   'auth when storage %s throws', (...failing) => {
     it('sends the token right after login', async () => {

@@ -121,6 +121,32 @@ describe('App when the change succeeds but reloading fails', () => {
     await expectStaleThenRecover(server, 'DELETE');
   });
 
+  it('closes the category manager after updating a category', async () => {
+    const server = stubServer({ get: ['current', failure()], mutation: () => json({ ...category, name: '게임기' }) });
+    await renderApp();
+
+    fireEvent.click(screen.getByRole('button', { name: '메뉴' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: '카테고리 관리' }));
+    fireEvent.click(screen.getByRole('button', { name: '게임 수정' }));
+    fireEvent.change(screen.getByLabelText('이름'), { target: { value: '게임기' } });
+    fireEvent.click(screen.getByRole('button', { name: '저장' }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    await expectStaleThenRecover(server, 'PUT');
+  });
+
+  it('closes the category manager after deleting a category', async () => {
+    const server = stubServer({ get: ['current', failure()], mutation: () => new Response(null, { status: 204 }) });
+    await renderApp();
+
+    fireEvent.click(screen.getByRole('button', { name: '메뉴' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: '카테고리 관리' }));
+    fireEvent.click(screen.getByRole('button', { name: '게임 삭제' }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    await expectStaleThenRecover(server, 'DELETE');
+  });
+
   it('reports a restore as applied when reloading fails', async () => {
     const server = stubServer({ get: ['current', failure()], mutation: () => json(initial) });
     await renderApp();

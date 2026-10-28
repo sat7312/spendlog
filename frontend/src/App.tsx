@@ -163,13 +163,17 @@ export default function App({ user, onLogout }: { user: User; onLogout: () => vo
 
   // 변경 요청이 성공하면 true를 돌려줍니다. 이후 목록 갱신만 실패하면 변경은 완료된 것으로 처리하고
   // 다시 불러오기 안내를 띄웁니다. 변경 요청은 자동으로 다시 보내지 않습니다.
+  // 안내와 다시 불러오기 버튼이 창에 가려지지 않도록 열린 창은 닫습니다.
   const run = async (action: () => Promise<unknown>) => {
     if (locked) return false;
     setBusy(true); setError('');
     try { await action(); }
     catch (e) { setError(errorMessage(e, '요청에 실패했습니다')); setBusy(false); return false; }
     try { await load(); }
-    catch (e) { setLoadError(`변경 사항은 반영되었지만 목록을 새로 불러오지 못했습니다. (${errorMessage(e, '요청에 실패했습니다')})`); }
+    catch (e) {
+      setLoadError(`변경 사항은 반영되었지만 목록을 새로 불러오지 못했습니다. (${errorMessage(e, '요청에 실패했습니다')})`);
+      setModal(null);
+    }
     finally { setBusy(false); }
     return true;
   };

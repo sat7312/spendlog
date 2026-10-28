@@ -19,13 +19,17 @@ export class ApiError extends Error {
 
 // 저장소를 쓸 수 없을 때를 대비해 이번 탭의 토큰을 메모리에도 둡니다.
 // persisted가 true이면 저장소가 현재 상태를 반영하므로 저장소 값을 읽어 다른 탭의 변경도 따릅니다.
+// 저장소에서 읽은 값은 메모리에도 반영해, 이후 저장소를 읽지 못할 때 마지막으로 확인한 상태를 씁니다.
 let memoryToken: string | null = null;
 let persisted = true;
 
 export const auth = {
   token: () => {
     if (persisted) {
-      try { return localStorage.getItem(tokenKey); } catch { /* 저장소를 읽지 못하면 메모리 값을 씁니다. */ }
+      try {
+        memoryToken = localStorage.getItem(tokenKey);
+        return memoryToken;
+      } catch { /* 저장소를 읽지 못하면 메모리 값을 씁니다. */ }
     }
     return memoryToken;
   },
