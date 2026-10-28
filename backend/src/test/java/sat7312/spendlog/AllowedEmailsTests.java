@@ -5,7 +5,10 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.nimbusds.jose.jwk.source.ImmutableSecret;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
+import javax.crypto.spec.SecretKeySpec;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -16,6 +19,7 @@ import org.springframework.security.oauth2.jwt.JwsHeader;
 import org.springframework.security.oauth2.jwt.JwtClaimsSet;
 import org.springframework.security.oauth2.jwt.JwtEncoder;
 import org.springframework.security.oauth2.jwt.JwtEncoderParameters;
+import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 
 @SpringBootTest(properties = {
@@ -32,8 +36,12 @@ class AllowedEmailsTests {
 
     private String token(String email) {
         Instant now = Instant.now();
-        JwtClaimsSet claims = JwtClaimsSet.builder().subject(email).issuedAt(now)
-                .expiresAt(now.plusSeconds(60)).claim("email", email).build();
+        return token(encoder, email, now, now.plusSeconds(60));
+    }
+
+    private static String token(JwtEncoder encoder, String email, Instant issuedAt, Instant expiresAt) {
+        JwtClaimsSet claims = JwtClaimsSet.builder().subject(email).issuedAt(issuedAt)
+                .expiresAt(expiresAt).claim("email", email).build();
         return encoder.encode(JwtEncoderParameters.from(JwsHeader.with(MacAlgorithm.HS256).build(), claims))
                 .getTokenValue();
     }
@@ -59,6 +67,31 @@ class AllowedEmailsTests {
     @Test
     void stillRejectsForgedGoogleCredential() throws Exception {
         mvc.perform(post("/api/auth/google").contentType(MediaType.APPLICATION_JSON).content("{\"credential\":\"bogus\"}"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void acceptsOnlyValidBearerTokens() throws Exception {
+        mvc.perform(get("/api/me").header("Authorization", "Bearer " + token("alice@example.com")))
+                .andExpect(status().isOk());
+
+        // 기본 시각 검증은 60초 허용 오차가 있으므로 5분 전에 만료된 토큰을 씁니다.
+        Instant now = Instant.now();
+        String expired = token(encoder, "alice@example.com", now.minusSeconds(600), now.minusSeconds(300));
+        mvc.perform(get("/api/me").header("Authorization", "Bearer " + expired))
+                .andExpect(status().isUnauthorized());
+
+        // 서버 키가 아닌 다른 32바이트 키로 서명한 토큰은 거부합니다.
+        var otherKey = new SecretKeySpec("another-secret-key-for-forged-tokens!".getBytes(StandardCharsets.UTF_8),
+                "HmacSHA256");
+        String forged = token(new NimbusJwtEncoder(new ImmutableSecret<>(otherKey)), "alice@example.com",
+                now, now.plusSeconds(60));
+        mvc.perform(get("/api/me").header("Authorization", "Bearer " + forged))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(get("/api/data").header("Authorization", "Bearer " + forged))
+                .andExpect(status().isUnauthorized());
+
+        mvc.perform(get("/api/me").header("Authorization", "Bearer not-a-token"))
                 .andExpect(status().isUnauthorized());
     }
 }

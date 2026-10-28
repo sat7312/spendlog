@@ -137,6 +137,8 @@ button:disabled{opacity:.45;cursor:not-allowed}
 
 .error-banner{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 14px;margin-bottom:24px;border-left:2px solid var(--danger);color:var(--danger);font-size:14px;background:var(--hover)}
 .error-banner button{border:0;background:none;color:inherit;font-size:20px;cursor:pointer;line-height:1}
+.error-banner .error-action{flex-shrink:0;font-size:14px;font-weight:600;text-decoration:underline}
+.error-banner .error-action:disabled{cursor:default;opacity:.5}
 
 /* 모달 */
 .overlay{position:fixed;inset:0;background:var(--overlay);display:flex;align-items:center;justify-content:center;z-index:100;padding:16px}

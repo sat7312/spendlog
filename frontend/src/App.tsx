@@ -14,6 +14,12 @@ const seoulToday = () => {
   return `${value('year')}-${value('month')}-${value('day')}`;
 };
 const monthKey = (date: string) => date.slice(0, 7);
+const themeKey = 'spendlog_theme';
+// 저장소를 쓸 수 없으면 기본 테마를 쓰고, 바꾼 테마는 이번 화면에만 적용합니다.
+const savedTheme = (): 'light' | 'dark' => {
+  try { return localStorage.getItem(themeKey) === 'dark' ? 'dark' : 'light'; } catch { return 'light'; }
+};
+const errorMessage = (e: unknown, fallback: string) => e instanceof Error ? e.message : fallback;
 
 function Icon({ name }: { name: string }) { return <i className={`ti ${name}`} aria-hidden="true" />; }
 
@@ -113,7 +119,7 @@ function CategoryShare({ categories, records, month, selected, onPick }: {
 export default function App({ user, onLogout }: { user: User; onLogout: () => void }) {
   const [data, setData] = useState<SpendlogData>(emptyData);
   const [selected, setSelected] = useState('');
-  const [theme, setTheme] = useState<'light' | 'dark'>(() => localStorage.getItem('spendlog_theme') === 'dark' ? 'dark' : 'light');
+  const [theme, setTheme] = useState<'light' | 'dark'>(savedTheme);
   const [modal, setModal] = useState<'record' | 'categories' | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [editing, setEditing] = useState<ExpenseRecord | null>(null);
@@ -126,6 +132,9 @@ export default function App({ user, onLogout }: { user: User; onLogout: () => vo
   const [day, setDay] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  // 화면의 데이터가 서버와 다를 수 있을 때의 안내입니다. 비어 있지 않으면 다시 불러올 때까지 변경을 막습니다.
+  const [loadError, setLoadError] = useState('');
+  const locked = busy || loadError !== '';
   const fileRef = useRef<HTMLInputElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -135,10 +144,15 @@ export default function App({ user, onLogout }: { user: User; onLogout: () => vo
     setSelected(current => next.categories.some(c => c.id === current) ? current : next.categories[0]?.id ?? '');
   };
 
-  useEffect(() => { load().catch(e => setError(e instanceof Error ? e.message : '데이터를 불러오지 못했습니다')); }, []);
+  useEffect(() => {
+    load().catch(e => setLoadError(`데이터를 불러오지 못했습니다. (${errorMessage(e, '요청에 실패했습니다')})`));
+  }, []);
   // 카테고리 관리 창을 닫으면 수정 중이던 내용은 버리고 추가 모드로 돌아갑니다.
   useEffect(() => { if (modal !== 'categories') resetCategoryForm(); }, [modal]);
-  useEffect(() => { document.body.dataset.theme = theme; localStorage.setItem('spendlog_theme', theme); }, [theme]);
+  useEffect(() => {
+    document.body.dataset.theme = theme;
+    try { localStorage.setItem(themeKey, theme); } catch { /* 저장하지 못해도 현재 화면의 테마는 유지합니다. */ }
+  }, [theme]);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { setModal(null); setMenuOpen(false); } };
     const onClick = (e: MouseEvent) => { if (!menuRef.current?.contains(e.target as Node)) setMenuOpen(false); };
@@ -147,10 +161,24 @@ export default function App({ user, onLogout }: { user: User; onLogout: () => vo
     return () => { document.removeEventListener('keydown', onKey); document.removeEventListener('mousedown', onClick); };
   }, []);
 
+  // 변경 요청이 성공하면 true를 돌려줍니다. 이후 목록 갱신만 실패하면 변경은 완료된 것으로 처리하고
+  // 다시 불러오기 안내를 띄웁니다. 변경 요청은 자동으로 다시 보내지 않습니다.
   const run = async (action: () => Promise<unknown>) => {
+    if (locked) return false;
     setBusy(true); setError('');
-    try { await action(); await load(); return true; }
-    catch (e) { setError(e instanceof Error ? e.message : '요청에 실패했습니다'); return false; }
+    try { await action(); }
+    catch (e) { setError(errorMessage(e, '요청에 실패했습니다')); setBusy(false); return false; }
+    try { await load(); }
+    catch (e) { setLoadError(`변경 사항은 반영되었지만 목록을 새로 불러오지 못했습니다. (${errorMessage(e, '요청에 실패했습니다')})`); }
+    finally { setBusy(false); }
+    return true;
+  };
+
+  const reload = async () => {
+    if (busy) return;
+    setBusy(true);
+    try { await load(); setLoadError(''); }
+    catch (e) { setLoadError(`데이터를 불러오지 못했습니다. (${errorMessage(e, '요청에 실패했습니다')})`); }
     finally { setBusy(false); }
   };
 
@@ -273,7 +301,7 @@ export default function App({ user, onLogout }: { user: User; onLogout: () => vo
               <div className="menu-user" title={user.email}>{user.name || user.email}</div>
               <button role="menuitem" onClick={menuAction(() => setModal('categories'))}><Icon name="ti-category" />카테고리 관리</button>
               <button role="menuitem" onClick={menuAction(exportData)}><Icon name="ti-download" />데이터 백업</button>
-              <button role="menuitem" onClick={menuAction(() => fileRef.current?.click())}><Icon name="ti-upload" />데이터 복원</button>
+              <button role="menuitem" onClick={menuAction(() => fileRef.current?.click())} disabled={locked}><Icon name="ti-upload" />데이터 복원</button>
               <button role="menuitem" onClick={menuAction(onLogout)}><Icon name="ti-logout" />로그아웃</button>
             </div>}
           </div>
@@ -283,6 +311,8 @@ export default function App({ user, onLogout }: { user: User; onLogout: () => vo
     </header>
 
     <main id="main">
+      {loadError && <div className="error-banner" role="alert">{loadError}
+        <button className="error-action" onClick={() => void reload()} disabled={busy}>다시 불러오기</button></div>}
       {error && <div className="error-banner" role="alert">{error}<button onClick={() => setError('')} aria-label="닫기">×</button></div>}
       {data.categories.length > 0 && <nav className="chips" aria-label="카테고리">
         {data.categories.map(c => <button key={c.id} className={`chip ${selected === c.id ? 'active' : ''}`}
@@ -295,7 +325,7 @@ export default function App({ user, onLogout }: { user: User; onLogout: () => vo
         <section className="hero">
           <div className="hero-head">
             <h1 className="hero-title">지금까지 {category.name}에 쓴 돈</h1>
-            <button className="btn btn-primary add-btn" onClick={() => openRecord()} disabled={busy}><Icon name="ti-plus" />기록 추가</button>
+            <button className="btn btn-primary add-btn" onClick={() => openRecord()} disabled={locked}><Icon name="ti-plus" />기록 추가</button>
           </div>
           <p className="hero-total"><span className="hero-num">{won(total)}</span><span className="hero-unit">원</span></p>
           <dl className="stats">
@@ -353,9 +383,9 @@ export default function App({ user, onLogout }: { user: User; onLogout: () => vo
               <input className="form-input" id="record-date" type="date" required value={form.date}
                 onChange={e => setForm({ ...form, date: e.target.value })} /></div>
           </div>
-          <div className="modal-actions">{editing && <button className="btn btn-text-danger modal-delete" type="button" onClick={() => void deleteRecord(editing)} disabled={busy}>삭제</button>}
+          <div className="modal-actions">{editing && <button className="btn btn-text-danger modal-delete" type="button" onClick={() => void deleteRecord(editing)} disabled={locked}>삭제</button>}
             <button className="btn btn-outline" type="button" onClick={() => setModal(null)}>취소</button>
-            <button className="btn btn-primary" type="submit" disabled={busy}>저장</button></div>
+            <button className="btn btn-primary" type="submit" disabled={locked}>저장</button></div>
         </form> : <>
           <h2 className="modal-title">카테고리 관리</h2>
           {data.categories.length > 0 && <ul className="cat-list">{data.categories.map(c => <li
@@ -363,8 +393,8 @@ export default function App({ user, onLogout }: { user: User; onLogout: () => vo
             <Icon name={c.icon} />
             <span className="cat-item-name">{c.name}</span><span className="cat-item-count">{data.records.filter(r => r.category === c.id).length}건</span>
             <button className="icon-btn" aria-label={`${c.name} 수정`} aria-pressed={editingCat?.id === c.id}
-              onClick={() => startEditCategory(c)} disabled={busy}><Icon name="ti-pencil" /></button>
-            <button className="icon-btn del" aria-label={`${c.name} 삭제`} onClick={() => void deleteCategory(c)} disabled={busy}><Icon name="ti-trash" /></button>
+              onClick={() => startEditCategory(c)} disabled={locked}><Icon name="ti-pencil" /></button>
+            <button className="icon-btn del" aria-label={`${c.name} 삭제`} onClick={() => void deleteCategory(c)} disabled={locked}><Icon name="ti-trash" /></button>
           </li>)}</ul>}
           <form className="category-form" onSubmit={e => void saveCategory(e)}>
             <h3 className="category-form-title">{editingCat ? `‘${editingCat.name}’ 수정` : '새 카테고리'}</h3>
@@ -379,7 +409,7 @@ export default function App({ user, onLogout }: { user: User; onLogout: () => vo
             <div className="modal-actions">{editingCat
               ? <button className="btn btn-outline" type="button" onClick={resetCategoryForm}>수정 취소</button>
               : <button className="btn btn-outline" type="button" onClick={() => setModal(null)}>닫기</button>}
-              <button className="btn btn-primary" type="submit" disabled={busy}>{editingCat ? '저장' : '추가'}</button></div>
+              <button className="btn btn-primary" type="submit" disabled={locked}>{editingCat ? '저장' : '추가'}</button></div>
           </form>
         </>}
       </div>

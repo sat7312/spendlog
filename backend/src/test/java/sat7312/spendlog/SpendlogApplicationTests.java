@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.hasSize;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -468,5 +469,111 @@ class SpendlogApplicationTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.categories", hasSize(0)))
                 .andExpect(jsonPath("$.records", hasSize(0)));
+    }
+
+    private static final String ICON_ERROR = "지원하지 않는 아이콘입니다";
+    /** 아이콘 필드 누락, JSON null, 지원하지 않는 문자열입니다. */
+    private static final List<String> INVALID_ICON_FIELDS = List.of("", ",\"icon\":null", ",\"icon\":\"ti-unknown\"");
+
+    @Test
+    void rejectsMissingNullOrUnsupportedIconsWithoutChangingData() throws Exception {
+        String before = restoreBackup("sam");
+        String categoryId = com.jayway.jsonpath.JsonPath.read(before, "$.categories[0].id");
+
+        for (String iconField : INVALID_ICON_FIELDS) {
+            mvc.perform(post("/api/categories").with(user("sam")).contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"name\":\"여행\"" + iconField + "}"))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(reason(ICON_ERROR));
+            assertThat(dataOf("sam")).isEqualTo(before);
+
+            mvc.perform(put("/api/categories/" + categoryId).with(user("sam")).contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"name\":\"게임\"" + iconField + "}"))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(reason(ICON_ERROR));
+            assertThat(dataOf("sam")).isEqualTo(before);
+
+            mvc.perform(put("/api/data").with(user("sam")).contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"categories\":[{\"id\":\"a\",\"name\":\"A\"" + iconField + "}],\"records\":[]}"))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(reason(ICON_ERROR));
+            assertThat(dataOf("sam")).isEqualTo(before);
+        }
+
+        // 지원하는 아이콘은 기존대로 허용합니다.
+        mvc.perform(post("/api/categories").with(user("sam")).contentType(MediaType.APPLICATION_JSON)
+                        .content(categoryInput("여행", "ti-plane")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.icon").value("ti-plane"));
+    }
+
+    @Test
+    void rejectsWholeBackupWhenLaterCategoryIsInvalid() throws Exception {
+        String before = restoreBackup("tina");
+        String[] invalidCategories = {
+                "{\"id\":\"c\",\"name\":\"C\"}",
+                "{\"id\":\"c\",\"name\":\"C\",\"icon\":null}",
+                "{\"id\":\"c\",\"name\":\"C\",\"icon\":\"ti-unknown\"}",
+                "{\"id\":\"c\",\"name\":\" \",\"icon\":\"ti-plane\"}",
+                "null"};
+        for (String invalid : invalidCategories) {
+            String backup = """
+                    {"categories":[{"id":"a","name":"A","icon":"ti-plane"},{"id":"b","name":"B","icon":"ti-music"},%s],
+                     "records":[{"id":"r1","category":"a","name":"항공권","amount":300000,"date":"2026-06-01"}]}
+                    """.formatted(invalid);
+            mvc.perform(put("/api/data").with(user("tina")).contentType(MediaType.APPLICATION_JSON).content(backup))
+                    .andExpect(status().isBadRequest());
+            assertThat(dataOf("tina")).isEqualTo(before);
+        }
+    }
+
+    @Test
+    void hidesOtherUsersCategoriesAndRecordsFromChanges() throws Exception {
+        String aliceBefore = restoreBackup("uma");
+        String aliceCategory = com.jayway.jsonpath.JsonPath.read(aliceBefore, "$.categories[0].id");
+        String aliceRecord = com.jayway.jsonpath.JsonPath.read(aliceBefore, "$.records[0].id");
+        String bobBefore = restoreBackup("victor");
+        String bobCategory = com.jayway.jsonpath.JsonPath.read(bobBefore, "$.categories[0].id");
+        String bobRecord = com.jayway.jsonpath.JsonPath.read(bobBefore, "$.records[0].id");
+
+        // 다른 사용자의 카테고리와 기록은 수정·삭제할 수 없습니다.
+        mvc.perform(put("/api/categories/" + aliceCategory).with(user("victor")).contentType(MediaType.APPLICATION_JSON)
+                        .content(categoryInput("가로채기", "ti-trophy")))
+                .andExpect(status().isNotFound());
+        mvc.perform(delete("/api/categories/" + aliceCategory).with(user("victor")))
+                .andExpect(status().isNotFound());
+        mvc.perform(put("/api/records/" + aliceRecord).with(user("victor")).contentType(MediaType.APPLICATION_JSON)
+                        .content(recordInput(bobCategory, "2026-06-01")))
+                .andExpect(status().isNotFound());
+        mvc.perform(delete("/api/records/" + aliceRecord).with(user("victor")))
+                .andExpect(status().isNotFound());
+
+        // 다른 사용자의 카테고리로 기록을 만들거나 자신의 기록을 옮길 수 없습니다.
+        mvc.perform(post("/api/records").with(user("victor")).contentType(MediaType.APPLICATION_JSON)
+                        .content(recordInput(aliceCategory, "2026-06-01")))
+                .andExpect(status().isNotFound());
+        mvc.perform(put("/api/records/" + bobRecord).with(user("victor")).contentType(MediaType.APPLICATION_JSON)
+                        .content(recordInput(aliceCategory, "2026-06-01")))
+                .andExpect(status().isNotFound());
+
+        assertThat(dataOf("uma")).isEqualTo(aliceBefore);
+        assertThat(dataOf("victor")).isEqualTo(bobBefore);
+    }
+
+    @Test
+    void rejectsEveryProtectedMethodWithoutLogin() throws Exception {
+        List<org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder> requests = List.of(
+                get("/api/me"),
+                get("/api/data"),
+                put("/api/data").contentType(MediaType.APPLICATION_JSON).content(BACKUP),
+                post("/api/categories").contentType(MediaType.APPLICATION_JSON).content(categoryInput("여행", "ti-plane")),
+                put("/api/categories/any").contentType(MediaType.APPLICATION_JSON).content(categoryInput("여행", "ti-plane")),
+                delete("/api/categories/any"),
+                post("/api/records").contentType(MediaType.APPLICATION_JSON).content(recordInput("any", "2026-06-01")),
+                put("/api/records/any").contentType(MediaType.APPLICATION_JSON).content(recordInput("any", "2026-06-01")),
+                delete("/api/records/any"));
+        for (var request : requests) {
+            mvc.perform(request).andExpect(status().isUnauthorized());
+        }
     }
 }

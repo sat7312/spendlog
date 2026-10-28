@@ -173,7 +173,8 @@ public class SpendlogApi {
     }
 
     private String icon(String value) {
-        if (!ICONS.contains(value)) throw badRequest("지원하지 않는 아이콘입니다");
+        // List.of로 만든 목록은 contains(null)에서 예외를 던지므로 null을 먼저 거부합니다.
+        if (value == null || !ICONS.contains(value)) throw badRequest("지원하지 않는 아이콘입니다");
         return value;
     }
 

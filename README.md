@@ -70,4 +70,23 @@ Postgres는 Neon, Supabase 등의 무료 플랜을 쓸 수 있습니다. 서비�
 
 처음에는 빈 가계부가 표시됩니다. 예시 데이터를 확인하려면 로그인 후 **데이터 복원**에서 [`frontend/public/sample-data.json`](frontend/public/sample-data.json)을 선택하세요. 복원은 내 데이터만 교체하며, 카테고리와 기록 ID는 서버에서 새로 발급합니다.
 
-프론트엔드 빌드는 `cd frontend && npm run build`, 백엔드 테스트는 `cd backend && ./gradlew test`로 확인할 수 있습니다.
+## 오류 상황에서의 동작
+
+- 브라우저 저장소(localStorage)를 쓸 수 없으면 로그인 토큰과 테마를 현재 탭의 메모리에만 둡니다. 이 경우 새로고침하면 다시 로그인해야 하고 테마는 라이트로 돌아갑니다.
+- 앱을 열 때 로그인 확인이 네트워크 오류나 서버 오류로 실패하면 토큰을 지우지 않고 **다시 시도** 버튼을 보여 줍니다. 토큰이 만료되었거나 거부되면(401) 로그인 화면으로 돌아갑니다.
+- 저장·삭제·복원은 완료되었는데 목록을 새로 불러오지 못하면, 변경이 반영되었다는 안내와 **다시 불러오기** 버튼을 보여 줍니다. 다시 불러오기는 조회만 다시 보내며, 목록을 불러올 때까지 다른 변경은 막습니다.
+
+## 테스트
+
+```bash
+cd backend && ./gradlew test
+```
+
+```bash
+cd frontend
+npm ci
+npm test -- --run
+npm run build
+```
+
+프론트엔드 테스트는 Vitest와 React Testing Library를 jsdom 환경에서 실행합니다. `npm test`만 실행하면 감시 모드로 동작합니다.
