@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { api, type Category, type ExpenseRecord, type RecordInput, type SpendlogData, type User } from './api';
+import { api, type Category, type ExpenseRecord, type RecordInput, type SpendlogData } from './api';
 
 const icons = ['ti-device-gamepad-2', 'ti-palette', 'ti-plane', 'ti-music', 'ti-book', 'ti-camera',
   'ti-run', 'ti-trophy', 'ti-pizza', 'ti-shirt', 'ti-ball-football', 'ti-headphones'];
@@ -116,7 +116,7 @@ function CategoryShare({ categories, records, month, selected, onPick }: {
   </section>;
 }
 
-export default function App({ user, onLogout }: { user: User; onLogout: () => void }) {
+export default function App() {
   const [data, setData] = useState<SpendlogData>(emptyData);
   const [selected, setSelected] = useState('');
   const [theme, setTheme] = useState<'light' | 'dark'>(savedTheme);
@@ -302,11 +302,9 @@ export default function App({ user, onLogout }: { user: User; onLogout: () => vo
             <button className="icon-btn" onClick={() => setMenuOpen(v => !v)} aria-label="메뉴"
               aria-haspopup="menu" aria-expanded={menuOpen}><Icon name="ti-menu-2" /></button>
             {menuOpen && <div className="menu-panel" role="menu">
-              <div className="menu-user" title={user.email}>{user.name || user.email}</div>
               <button role="menuitem" onClick={menuAction(() => setModal('categories'))}><Icon name="ti-category" />카테고리 관리</button>
               <button role="menuitem" onClick={menuAction(exportData)}><Icon name="ti-download" />데이터 백업</button>
               <button role="menuitem" onClick={menuAction(() => fileRef.current?.click())} disabled={locked}><Icon name="ti-upload" />데이터 복원</button>
-              <button role="menuitem" onClick={menuAction(onLogout)}><Icon name="ti-logout" />로그아웃</button>
             </div>}
           </div>
           <input ref={fileRef} type="file" accept=".json,application/json" hidden onChange={e => void importData(e.target.files?.[0])} />

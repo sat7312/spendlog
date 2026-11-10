@@ -3,7 +3,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import App from './App';
 import type { SpendlogData } from './api';
 
-const user = { email: 'alice@example.com', name: 'Alice' };
 const today = (() => {
   const parts = new Intl.DateTimeFormat('en-US', {
     timeZone: 'Asia/Seoul', year: 'numeric', month: '2-digit', day: '2-digit',
@@ -46,7 +45,7 @@ const failure = () => json({ detail: '서버 점검 중입니다' }, 503);
 const staleText = /변경 사항은 반영되었지만 목록을 새로 불러오지 못했습니다/;
 
 async function renderApp() {
-  render(<App user={user} onLogout={() => {}} />);
+  render(<App />);
   await screen.findByRole('button', { name: '스팀 수정' });
 }
 
@@ -213,5 +212,17 @@ describe('App theme without storage', () => {
     fireEvent.click(screen.getByRole('button', { name: '다크 모드로 전환' }));
     expect(document.body.dataset.theme).toBe('dark');
     expect(screen.getByRole('button', { name: '라이트 모드로 전환' })).toBeTruthy();
+  });
+});
+
+describe('local app without login', () => {
+  it('shows the ledger right away and has no logout menu', async () => {
+    stubServer({ get: ['current'] });
+    await renderApp();
+    const fetchMock = vi.mocked(fetch);
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual(['/api/data']);
+    fireEvent.click(screen.getByRole('button', { name: '메뉴' }));
+    expect(screen.getByRole('menuitem', { name: /데이터 백업/ })).toBeTruthy();
+    expect(screen.queryByRole('menuitem', { name: /로그아웃/ })).toBeNull();
   });
 });

@@ -1,6 +1,5 @@
 package sat7312.spendlog;
 
-import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.Id;
@@ -14,9 +13,6 @@ import java.time.LocalDate;
 public class ExpenseRecord {
     @Id
     private String id;
-
-    @Column(name = "owner_id")
-    private String ownerId;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "category_id", nullable = false)
@@ -34,7 +30,6 @@ public class ExpenseRecord {
     }
 
     public void update(Category category, String name, long amount, LocalDate date) {
-        this.ownerId = category.getOwnerId();
         this.category = category;
         this.name = name;
         this.amount = amount;
@@ -42,7 +37,6 @@ public class ExpenseRecord {
     }
 
     public String getId() { return id; }
-    public String getOwnerId() { return ownerId; }
     public Category getCategory() { return category; }
     public String getName() { return name; }
     public long getAmount() { return amount; }
