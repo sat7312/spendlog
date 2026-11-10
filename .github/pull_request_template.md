@@ -17,14 +17,14 @@
 - [ ] 없음
 - [ ] 환경 변수·설정 변경
 - [ ] 의존성 추가·변경
-- [ ] DB 스키마 변경
-- [ ] API 요청·응답 형식 변경
+- [ ] 브라우저 저장 형식(`spendlog_data`) 변경
+- [ ] 백업 JSON 형식 변경
 
 ## 테스트
 
 <!-- 실행한 테스트와 결과, 직접 확인한 방법을 적어 주세요. -->
-- [ ] 백엔드 테스트 통과 (`cd backend && ./gradlew test`)
-- [ ] 프론트엔드 빌드 확인 (`npm --prefix frontend run build`, 프론트엔드 변경 시)
+- [ ] 프론트엔드 테스트 통과 (`npm --prefix frontend test -- --run`)
+- [ ] 프론트엔드 빌드 확인 (`npm --prefix frontend run build`)
 
 ## 스크린샷
 

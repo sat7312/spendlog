@@ -132,7 +132,7 @@ export default function App() {
   const [day, setDay] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  // 화면의 데이터가 서버와 다를 수 있을 때의 안내입니다. 비어 있지 않으면 다시 불러올 때까지 변경을 막습니다.
+  // 화면의 데이터가 저장된 데이터와 다를 수 있을 때의 안내입니다. 비어 있지 않으면 다시 불러올 때까지 변경과 백업을 막습니다.
   const [loadError, setLoadError] = useState('');
   const locked = busy || loadError !== '';
   const fileRef = useRef<HTMLInputElement>(null);
@@ -303,7 +303,7 @@ export default function App() {
               aria-haspopup="menu" aria-expanded={menuOpen}><Icon name="ti-menu-2" /></button>
             {menuOpen && <div className="menu-panel" role="menu">
               <button role="menuitem" onClick={menuAction(() => setModal('categories'))}><Icon name="ti-category" />카테고리 관리</button>
-              <button role="menuitem" onClick={menuAction(exportData)}><Icon name="ti-download" />데이터 백업</button>
+              <button role="menuitem" onClick={menuAction(exportData)} disabled={loadError !== ''}><Icon name="ti-download" />데이터 백업</button>
               <button role="menuitem" onClick={menuAction(() => fileRef.current?.click())} disabled={locked}><Icon name="ti-upload" />데이터 복원</button>
             </div>}
           </div>
