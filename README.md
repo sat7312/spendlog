@@ -1,73 +1,58 @@
 # SpendLog
 
-`spendlog.html`을 바탕으로 만든 가계부 웹 앱입니다. React·TypeScript 화면은 `frontend/`, Spring Boot API는 `backend/`에 있습니다. Google 계정으로 로그인하며, 카테고리와 지출 기록은 사용자별로 분리되어 저장됩니다.
+`spendlog.html`을 바탕으로 만든 가계부 웹 앱입니다. React·TypeScript로 만든 화면만 있고 서버는 없습니다. 카테고리와 지출 기록은 브라우저의 localStorage에 저장되며, 로그인 없이 바로 사용합니다.
 
-## 구조
+- 배포 주소: https://sat7312.github.io/spendlog/
+- 로컬 개발: http://localhost:5173
 
-```
-GitHub Pages (frontend/dist)
-  └─ Google 로그인 버튼 → Google ID 토큰
-        └─ POST /api/auth/google ─→ Spring Boot (backend/)
-                                     ├─ Google 공개키로 ID 토큰 검증
-                                     ├─ users 테이블에 사용자 저장
-                                     └─ 자체 JWT(7일) 발급 → 이후 모든 API에 Bearer로 전달
-```
+## 데이터 저장
 
-- 인증: Spring Security OAuth2 Resource Server가 서버가 발급한 HS256 JWT를 검증합니다.
-- 데이터: 로컬은 H2 파일 DB, 배포 환경은 `SPRING_DATASOURCE_*` 환경변수로 지정한 Postgres를 사용합니다.
-
-## 준비: Google OAuth 클라이언트
-
-1. [Google Cloud Console](https://console.cloud.google.com/apis/credentials)에서 **OAuth 클라이언트 ID → 웹 애플리케이션**을 만듭니다.
-2. **승인된 JavaScript 원본**에 `http://localhost:5173`과 `https://sat7312.github.io`를 추가합니다.
-3. 발급된 클라이언트 ID를 백엔드 `GOOGLE_CLIENT_ID`와 프론트엔드 `VITE_GOOGLE_CLIENT_ID`에 같은 값으로 넣습니다.
+- 데이터는 브라우저 localStorage의 `spendlog_data` 키에 `{ version, categories, records }` 형태로 저장됩니다. 서버로는 아무것도 보내지 않습니다.
+- 저장 영역은 **브라우저·프로필·주소(프로토콜·호스트·포트)마다 따로**입니다. GitHub Pages 주소와 `localhost:5173`, 다른 브라우저나 기기의 데이터는 서로 공유되지 않습니다. 같은 `https://sat7312.github.io`의 다른 프로젝트와는 저장 영역을 함께 쓰므로 앱 전용 키만 사용합니다.
+- 브라우저 데이터 삭제, 프로필 삭제, 시크릿 창 종료 등으로 데이터가 사라질 수 있습니다. 메뉴의 **데이터 백업**으로 JSON 파일을 받아 따로 보관하세요.
+- 여러 탭에서 열어도 변경할 때마다 저장된 최신 값을 다시 읽어 그 위에 적용합니다. 다만 다른 탭의 변경이 화면에 바로 보이지는 않으므로, 백업하기 전에는 한 탭에서 새로고침한 뒤 진행하세요. 두 탭에서 같은 순간에 저장하면 나중 저장이 이길 수 있습니다.
 
 ## 로컬 실행
 
-JDK 25와 Node.js 20 이상이 필요합니다. 터미널 두 개에서 각각 실행하세요.
-
-```bash
-cd backend
-GOOGLE_CLIENT_ID=<클라이언트 ID> ./gradlew bootRun
-```
+Node.js 20 이상이 필요합니다.
 
 ```bash
 cd frontend
 npm install
-VITE_GOOGLE_CLIENT_ID=<클라이언트 ID> npm run dev
+npm run dev
 ```
 
-브라우저에서 `http://localhost:5173`을 엽니다. 개발 서버는 `/api` 요청을 `http://localhost:8080`으로 전달합니다. 환경변수 목록은 [`backend/.env.example`](backend/.env.example)과 [`frontend/.env.example`](frontend/.env.example)에 있습니다. `JWT_SECRET`을 비워 두면 실행할 때마다 임의 키를 쓰므로 재시작 시 다시 로그인해야 합니다.
+브라우저에서 `http://localhost:5173`을 엽니다.
 
-## 배포
+## 배포 (GitHub Pages)
 
-### 백엔드
-
-[`backend/Dockerfile`](backend/Dockerfile)로 이미지를 만들어 Cloud Run, Render, Fly.io 등 Docker를 실행하는 곳에 올립니다. 서버는 `PORT` 환경변수를 따릅니다. 다음 환경변수를 설정하세요.
-
-| 변수 | 값 |
-| --- | --- |
-| `GOOGLE_CLIENT_ID` | OAuth 클라이언트 ID |
-| `JWT_SECRET` | 32바이트 이상 임의 문자열 (`openssl rand -base64 48`) |
-| `CORS_ALLOWED_ORIGINS` | `https://sat7312.github.io` |
-| `SPRING_DATASOURCE_URL` | `jdbc:postgresql://<host>:5432/<db>?sslmode=require` |
-| `SPRING_DATASOURCE_USERNAME` / `SPRING_DATASOURCE_PASSWORD` | DB 계정 |
-
-Postgres는 Neon, Supabase 등의 무료 플랜을 쓸 수 있습니다. 서비스가 `postgres://...` 형식 주소를 주면 `jdbc:postgresql://` 형식으로 바꾸고 계정 정보는 별도 변수로 넣습니다.
-
-### 프론트엔드 (GitHub Pages)
-
-1. 저장소 **Settings → Pages → Source**를 **GitHub Actions**로 바꿉니다.
-2. **Settings → Secrets and variables → Actions → Variables**에 `API_BASE_URL`(백엔드 주소, 예: `https://spendlog-api.example.com`)과 `GOOGLE_CLIENT_ID`를 추가합니다.
-3. `main`에 `frontend/` 변경을 푸시하면 [`deploy-frontend.yml`](.github/workflows/deploy-frontend.yml)이 빌드해 `https://sat7312.github.io/spendlog/`에 배포합니다.
+`main`에 `frontend/` 변경을 푸시하면 [`deploy-frontend.yml`](.github/workflows/deploy-frontend.yml)이 테스트와 빌드를 거쳐 `https://sat7312.github.io/spendlog/`에 배포합니다. 저장소 **Settings → Pages → Source**가 **GitHub Actions**여야 합니다. 별도 환경변수는 필요 없습니다.
 
 ## 데이터와 기능
 
-- Google 로그인, 사용자별 데이터 분리, 로그아웃
-- 카테고리 추가·삭제, 기록 추가·수정·삭제
+- 카테고리 추가·수정·삭제, 기록 추가·수정·삭제
 - 월별 지출 차트, 총 지출·이번 달·최근 6개월 월평균, 월별 기록 펼치기
 - 라이트·다크 테마, JSON 백업·복원
 
-처음에는 빈 가계부가 표시됩니다. 예시 데이터를 확인하려면 로그인 후 **데이터 복원**에서 [`frontend/public/sample-data.json`](frontend/public/sample-data.json)을 선택하세요. 복원은 내 데이터만 교체하며, 카테고리와 기록 ID는 서버에서 새로 발급합니다.
+처음에는 빈 가계부가 표시됩니다. 예시 데이터를 확인하려면 **데이터 복원**에서 [`frontend/public/sample-data.json`](frontend/public/sample-data.json)을 선택하세요. 복원은 저장된 데이터 전체를 백업 파일 내용으로 교체하며(합치지 않음), 카테고리와 기록 ID는 새로 발급합니다. 백업 파일에 잘못된 항목이 하나라도 있으면 아무것도 바꾸지 않고 전체를 거부합니다.
 
-프론트엔드 빌드는 `cd frontend && npm run build`, 백엔드 테스트는 `cd backend && ./gradlew test`로 확인할 수 있습니다.
+예전 서버 버전(로컬 Spring + H2 DB)에서 쓰던 데이터는 같은 백업 형식의 JSON으로 내보내 두었습니다. 쓰려는 주소마다 **데이터 복원**으로 그 파일을 불러오세요.
+
+## 오류 상황에서의 동작
+
+- 브라우저 저장소에 접근할 수 없으면(브라우저 설정 등) 빈 가계부로 보여 주지 않고 오류와 **다시 불러오기** 버튼을 보여 줍니다. 그동안 변경·백업·복원은 막힙니다.
+- 저장 공간이 부족하거나 저장에 실패하면 저장되지 않았다고 알리고 입력 내용과 기존 데이터를 그대로 둡니다.
+- 저장된 값이 손상되었거나 지원하지 않는 형식이면 그 값을 고치거나 덮어쓰지 않고 오류를 보여 줍니다. 복구하려면 개발자 도구(Application → Local Storage)에서 해당 주소의 `spendlog_data` 값을 먼저 파일로 복사해 보관한 뒤, 그 키만 지우고 다시 불러온 다음 백업 JSON을 **데이터 복원**으로 불러오세요. 저장소 전체를 지우면 테마 등 다른 값도 사라지니 해당 키만 지우세요.
+- 저장은 완료되었는데 목록을 새로 불러오지 못하면, 변경이 반영되었다는 안내와 **다시 불러오기** 버튼을 보여 줍니다. 다시 불러오기는 조회만 다시 하며, 목록을 불러올 때까지 다른 변경은 막습니다.
+- 브라우저 저장소를 쓸 수 없으면 테마는 현재 탭에서만 기억합니다.
+
+## 테스트
+
+```bash
+cd frontend
+npm ci
+npm test -- --run
+npm run build
+```
+
+Vitest와 React Testing Library를 jsdom 환경에서 실행합니다. `npm test`만 실행하면 감시 모드로 동작합니다.
